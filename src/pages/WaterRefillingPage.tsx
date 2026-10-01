@@ -1,0 +1,646 @@
+import React, { useState, useMemo } from 'react';
+import {
+  PageHeader, Card, CardHeader, CardBody, Badge, Button,
+  Table, Thead, Tbody, Th, Td, Tr, Modal, Input, Textarea,
+  SearchBar, useToast, KpiCard, StatRow,
+} from '../components/ui';
+import { fmt } from '../utils/formatters';
+import { waterProducts, waterSales } from '../data/water';
+import { customers } from '../data/customers';
+import { 
+  Droplets, Banknote, Smartphone, ShoppingCart, 
+  Search, Plus, MapPin, Truck, ChevronLeft, Droplet, CheckCircle2,
+  AlertCircle, ReceiptText, XCircle
+} from 'lucide-react';
+
+import type { PageId } from '../components/Layout';
+
+interface Props { subPage: PageId; onNavigate: (p: PageId) => void; userName: string; }
+
+export default function WaterRefillingPage({ subPage, onNavigate, userName }: Props) {
+  if (subPage === 'water-new') return <WaterPOS onNavigate={onNavigate} userName={userName} />;
+  return <WaterDashboard onNavigate={onNavigate} />;
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
+  const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState('today');
+  const [viewSale, setViewSale] = useState<any>(null);
+
+  const todaySales = waterSales.filter(s => s.date.startsWith('2026-09-29'));
+  const todayCash  = todaySales.filter(s => s.paymentMethod === 'cash').reduce((a, s) => a + s.total, 0);
+  const todayGcash = todaySales.filter(s => s.paymentMethod === 'gcash').reduce((a, s) => a + s.total, 0);
+  
+  const todayGallons = todaySales.reduce((acc, sale) => {
+    return acc + sale.items.reduce((b: number, item: any) => 
+      b + (item.name.includes('Gallon') && !item.name.includes('Cap') ? item.qty : 0), 0);
+  }, 0);
+
+  const filtered = waterSales.filter(s =>
+    s.id.toLowerCase().includes(search.toLowerCase()) ||
+    s.customerName.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const methodBadge = (method: string) => {
+    if (method === 'gcash') return <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Smartphone className="w-3 h-3" /> GCASH</span>;
+    if (method === 'cash') return <span className="text-xs font-bold text-green-600 flex items-center gap-1"><Banknote className="w-3 h-3" /> CASH</span>;
+    return <span className="text-xs font-bold text-slate-400">—</span>;
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Water Refilling" subtitle="Sales, deliveries, and inventory tracking"
+        actions={
+          <Button onClick={() => onNavigate('water-new')} icon={<Plus className="w-4 h-4" />}>
+            New Sale
+          </Button>
+        } />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <KpiCard title="Today's Revenue" value={fmt.peso(todayCash + todayGcash)} icon={<Droplets className="w-5 h-5 text-blue-500" />} />
+        <KpiCard title="Cash Sales" value={fmt.peso(todayCash)} icon={<Banknote className="w-5 h-5 text-green-500" />} />
+        <KpiCard title="GCash Sales" value={fmt.peso(todayGcash)} icon={<Smartphone className="w-5 h-5 text-blue-500" />} />
+        <KpiCard title="Gallons Sold" value={`${todayGallons} gal`} icon={<Droplet className="w-5 h-5 text-cyan-500" />} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <SearchBar value={search} onChange={setSearch} placeholder="Search sales by ID or Customer…" className="w-full sm:w-80" />
+            <select value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white">
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="all">All Time</option>
+            </select>
+            <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
+          </div>
+        </CardHeader>
+        <div className="max-h-[300px] overflow-y-auto relative">
+          <Table>
+            <Thead>
+              <Tr>
+              <Th>Transaction ID</Th>
+              <Th>Customer</Th>
+              <Th>Date</Th>
+              <Th>Items Summary</Th>
+              <Th align="right">Total</Th>
+              <Th>Method</Th>
+              <Th>Type</Th>
+              <Th>Processed By</Th>
+              <Th align="center">Actions</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {filtered.length === 0 ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No sales found</span></Td></Tr>
+            ) : filtered.map(sale => (
+              <Tr key={sale.id} onClick={() => setViewSale(sale)}>
+                <Td className="font-mono text-xs text-blue-600 font-semibold">{sale.id}</Td>
+                <Td>
+                  <p className="font-medium text-slate-800">{sale.customerName}</p>
+                  {sale.phone && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{sale.phone}</p>}
+                </Td>
+                <Td className="text-xs text-slate-500 font-medium">{fmt.shortDate(sale.date)}</Td>
+                <Td className="text-xs text-slate-600 max-w-[200px] truncate" title={sale.items.map((i:any) => `${i.qty}× ${i.name}`).join(', ')}>
+                  {sale.items.map((i:any) => `${i.qty}× ${i.name}`).join(', ')}
+                </Td>
+                <Td align="right" className="font-mono font-bold text-slate-900">{fmt.peso(sale.total)}</Td>
+                <Td>{methodBadge(sale.paymentMethod)}</Td>
+                <Td>
+                  <Badge variant={sale.delivery ? 'blue' : 'gray'}>
+                    {sale.delivery ? 'Delivery' : 'Walk-in'}
+                  </Badge>
+                </Td>
+                <Td className="text-xs text-slate-500">{sale.processedBy}</Td>
+                <Td align="center">
+                  <Button size="xs" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewSale(sale); }} icon={<ReceiptText className="w-4 h-4 text-slate-500" />} title="View Details" />
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+          </Table>
+        </div>
+      </Card>
+
+      {/* Sale Detail Modal */}
+      {viewSale && (
+        <Modal open={!!viewSale} onClose={() => setViewSale(null)} title="Water Sale Details" size="md"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setViewSale(null)}>Close</Button>
+              <Button variant="outline" icon={<ReceiptText className="w-4 h-4" />}>Reprint Receipt</Button>
+            </>
+          }>
+          <div className="space-y-5">
+            <div className="flex justify-between items-start pb-4 border-b border-slate-100">
+              <div>
+                <p className="text-xl font-bold text-slate-900 tracking-tight">{fmt.peso(viewSale.total)}</p>
+                <p className="text-sm text-slate-500 mt-1">{viewSale.customerName}</p>
+              </div>
+              <Badge variant={viewSale.delivery ? 'blue' : 'gray'}>
+                {viewSale.delivery ? 'DELIVERY' : 'WALK-IN'}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Transaction ID</p>
+                <p className="font-mono text-slate-800">{viewSale.id}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Date</p>
+                <p className="text-slate-800">{fmt.datetime(viewSale.date)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Method</p>
+                <div>{methodBadge(viewSale.paymentMethod)}</div>
+              </div>
+              {viewSale.gcashRef && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Reference No.</p>
+                  <p className="font-mono text-slate-800">{viewSale.gcashRef}</p>
+                </div>
+              )}
+            </div>
+
+            {viewSale.delivery && viewSale.deliveryAddress && (
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                <div className="flex items-center gap-2 mb-2 text-blue-700">
+                  <MapPin className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wider">Delivery Details</span>
+                </div>
+                <p className="text-sm text-blue-900 font-medium">{viewSale.deliveryAddress}</p>
+                {viewSale.phone && <p className="text-xs text-blue-700 mt-1">{viewSale.phone}</p>}
+                {viewSale.notes && <p className="text-xs text-blue-600 mt-2 italic">"{viewSale.notes}"</p>}
+              </div>
+            )}
+
+            <div className="border border-slate-100 rounded-xl overflow-hidden">
+              <div className="bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-400 uppercase flex justify-between">
+                <span>Items</span><span>Amount</span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {viewSale.items.map((item: any, i: number) => (
+                  <div key={i} className="px-4 py-2.5 text-sm flex justify-between">
+                    <span>{item.qty}× {item.name} <span className="text-slate-400 text-xs ml-1">@ {fmt.peso(item.price)}</span></span>
+                    <span className="font-mono font-medium">{fmt.peso(item.qty * item.price)}</span>
+                  </div>
+                ))}
+              </div>
+              {viewSale.deliveryFee > 0 && (
+                <div className="px-4 py-2.5 text-sm flex justify-between bg-slate-50/50 border-t border-slate-100">
+                  <span className="text-slate-600 flex items-center gap-1.5"><Truck className="w-4 h-4" /> Delivery Fee</span>
+                  <span className="font-mono text-slate-700">{fmt.peso(viewSale.deliveryFee)}</span>
+                </div>
+              )}
+              <div className="px-4 py-3 text-sm flex justify-between border-t border-slate-200 font-bold bg-slate-50">
+                <span className="text-slate-800">TOTAL</span>
+                <span className="font-mono text-slate-900 text-base">{fmt.peso(viewSale.total)}</span>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── Water POS ────────────────────────────────────────────────────────────────
+interface CartLine { productId: string; name: string; price: number; qty: number; category: string; subtotal: number; }
+
+function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
+  const toast = useToast();
+
+  const [custSearch, setCustSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [isNewCust, setIsNewCust] = useState(false);
+  const [newCust, setNewCust] = useState({ name: '', phone: '', address: '' });
+  
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const [paymentMethod, setPaymentMethod] = useState<'cash'|'gcash'|'unpaid'|''>('');
+  const [amountReceived, setAmountReceived] = useState('');
+  const [gcashRef, setGcashRef] = useState('');
+
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [txnId] = useState(`WAT-TXN-${String(Math.floor(Math.random()*900)+100)}`);
+
+  // Compute dynamic delivery fee based on gallons
+  const deliveryFee = useMemo(() => {
+    if (!deliveryEnabled) return 0;
+    const gallonCount = cart.reduce((acc, item) => {
+      // Assuming 20L or 10L gallons are what counts for delivery fee
+      if (item.category === 'Gallon') return acc + item.qty;
+      return acc;
+    }, 0);
+    
+    if (gallonCount === 0) return 0; // Or minimum fee
+    if (gallonCount === 1) return 35;
+    if (gallonCount === 2) return 70;
+    if (gallonCount === 3) return 100;
+    if (gallonCount === 4) return 135;
+    if (gallonCount === 5) return 170;
+    if (gallonCount === 6) return 200;
+    
+    // Fallback for > 6
+    return 200 + (gallonCount - 6) * 30;
+  }, [cart, deliveryEnabled]);
+
+  const filteredCusts = customers.filter(c =>
+    `${c.firstName} ${c.lastName}`.toLowerCase().includes(custSearch.toLowerCase()) ||
+    c.phone.includes(custSearch)
+  );
+
+  const categories = ['All', ...Array.from(new Set((waterProducts as any[]).map((p: any) => p.category)))];
+  const displayed = activeCategory === 'All' ? waterProducts : (waterProducts as any[]).filter((p: any) => p.category === activeCategory);
+
+  const addToCart = (product: any) => {
+    setCart(prev => {
+      const ex = prev.find(c => c.productId === product.id);
+      if (ex) return prev.map(c => c.productId === product.id ? {...c, qty: c.qty + 1, subtotal: (c.qty+1)*c.price} : c);
+      return [...prev, { productId: product.id, name: product.name, price: product.price, qty: 1, category: product.category, subtotal: product.price }];
+    });
+  };
+
+  const updateQty = (productId: string, qty: number) => {
+    if (qty <= 0) setCart(p => p.filter(c => c.productId !== productId));
+    else setCart(p => p.map(c => c.productId === productId ? {...c, qty, subtotal: qty*c.price} : c));
+  };
+
+  const cartSubtotal = cart.reduce((s, c) => s + c.subtotal, 0);
+  const total        = cartSubtotal + deliveryFee;
+  const received     = paymentMethod === 'unpaid' ? 0 : (parseFloat(amountReceived) || 0);
+  const change       = paymentMethod === 'unpaid' ? 0 : Math.max(0, received - total);
+  const balance      = paymentMethod === 'unpaid' ? total : Math.max(0, total - received);
+
+  const custName = selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : (isNewCust && newCust.name ? newCust.name : null);
+
+  const handleSave = () => {
+    if (cart.length === 0) { toast.error('Add at least one item to the cart.'); return; }
+    if (deliveryEnabled && !deliveryAddress && !selectedCustomer?.address) { toast.error('Enter delivery address.'); return; }
+    if (!paymentMethod) { toast.error('Select payment method or Mark as Debt.'); return; }
+    if (paymentMethod === 'gcash' && received > 0 && !gcashRef) { toast.error('Enter GCash reference.'); return; }
+    if (paymentMethod !== 'unpaid' && received <= 0) { toast.error('Enter received amount.'); return; }
+    setShowReceipt(true);
+  };
+
+  const resetTransaction = () => {
+    setCart([]); setSelectedCustomer(null); setCustSearch(''); setIsNewCust(false); setNewCust({name:'',phone:'',address:''});
+    setDeliveryEnabled(false); setDeliveryAddress('');
+    setPaymentMethod(''); setAmountReceived(''); setGcashRef(''); setNotes(''); setShowReceipt(false);
+  };
+
+  // Receipt UI
+  if (showReceipt) {
+    return (
+      <div className="max-w-md mx-auto py-8">
+        <div className="flex items-center gap-3 mb-6">
+          <Button variant="outline" size="sm" onClick={() => setShowReceipt(false)} icon={<ChevronLeft className="w-4 h-4" />}>Back to Edit</Button>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Review Receipt</h1>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden print:shadow-none print:border-none print:w-full">
+          {/* Receipt Header */}
+          <div className="bg-slate-900 px-6 py-6 text-white text-center rounded-t-2xl">
+            <div className="w-12 h-12 mx-auto bg-blue-600 rounded-full flex items-center justify-center mb-3">
+              <Droplets className="w-6 h-6 text-white" />
+            </div>
+            <div className="text-xl font-bold tracking-tight">ALMS Water Refilling</div>
+            <div className="text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">Alkaline • Purified • Mineral</div>
+            <div className="mt-4 font-mono text-sm bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 inline-block shadow-inner">{txnId}</div>
+          </div>
+          
+          <div className="px-6 py-5 grid grid-cols-2 gap-4 text-sm border-b border-dashed border-slate-200">
+            <div><p className="text-xs font-semibold text-slate-400 uppercase mb-0.5">Customer</p><p className="font-semibold text-slate-800">{custName || 'Walk-in Customer'}</p></div>
+            <div className="text-right"><p className="text-xs font-semibold text-slate-400 uppercase mb-0.5">Date & Time</p><p className="font-medium text-slate-800">{new Date().toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</p></div>
+            <div><p className="text-xs font-semibold text-slate-400 uppercase mb-0.5">Cashier</p><p className="text-slate-800">{userName}</p></div>
+            <div className="text-right"><p className="text-xs font-semibold text-slate-400 uppercase mb-0.5">Order Type</p><Badge variant={deliveryEnabled?'blue':'gray'}>{deliveryEnabled?'Delivery':'Walk-in / Pickup'}</Badge></div>
+          </div>
+          
+          {deliveryEnabled && (
+            <div className="px-6 py-4 bg-slate-50 border-b border-dashed border-slate-200 text-sm">
+              <div className="flex items-center gap-2 mb-1.5 text-blue-700">
+                <MapPin className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Delivery Address</span>
+              </div>
+              <p className="text-slate-700 font-medium pl-6">{deliveryAddress || selectedCustomer?.address}</p>
+            </div>
+          )}
+          
+          <div className="px-6 py-5 border-b border-dashed border-slate-200">
+            <p className="text-xs font-semibold text-slate-400 uppercase mb-4 tracking-wider">Items</p>
+            <div className="space-y-3">
+              {cart.map((c, i) => (
+                <div key={i} className="flex justify-between text-sm">
+                  <div><span className="font-medium text-slate-800">{c.name}</span><span className="text-slate-500 ml-2 text-xs">× {c.qty}</span></div>
+                  <span className="font-mono font-medium text-slate-900">{fmt.peso(c.subtotal)}</span>
+                </div>
+              ))}
+              {deliveryEnabled && deliveryFee > 0 && (
+                <div className="flex justify-between text-sm pt-3 mt-3 border-t border-slate-100">
+                  <span className="text-slate-600 flex items-center gap-1.5"><Truck className="w-4 h-4" /> Delivery Fee</span>
+                  <span className="font-mono font-medium text-slate-900">{fmt.peso(deliveryFee)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 bg-slate-50">
+            <div className="flex justify-between font-bold text-slate-900 text-lg mb-4">
+              <span>TOTAL</span><span className="font-mono">{fmt.peso(total)}</span>
+            </div>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600"><span>Payment Method</span><span className="font-bold uppercase text-slate-800">{paymentMethod}</span></div>
+              {gcashRef && <div className="flex justify-between text-slate-600"><span>Reference No.</span><span className="font-mono">{gcashRef}</span></div>}
+              
+              {paymentMethod !== 'unpaid' && (
+                <>
+                  <div className="flex justify-between text-slate-600"><span>Amount Received</span><span className="font-mono text-slate-800">{fmt.peso(received)}</span></div>
+                  {change > 0 && <div className="flex justify-between text-green-700 font-semibold pt-1 border-t border-slate-200 mt-1"><span>Change Due</span><span className="font-mono">{fmt.peso(change)}</span></div>}
+                </>
+              )}
+              
+              {balance > 0 && (
+                <div className="flex justify-between text-red-600 font-bold pt-1 border-t border-slate-200 mt-1">
+                  <span>Balance (Debt)</span><span className="font-mono">{fmt.peso(balance)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className={`px-6 py-4 text-center text-sm font-bold uppercase tracking-widest ${paymentMethod === 'unpaid' || balance > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+            {paymentMethod === 'unpaid' || balance > 0 ? 'UNPAID / DEBT RECORDED' : 'FULLY PAID'}
+          </div>
+        </div>
+        
+        <div className="flex gap-3 mt-6">
+          <Button variant="outline" className="flex-1 justify-center" onClick={() => toast.info('Printing receipt…')} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+          <Button variant="primary" className="flex-1 justify-center" onClick={() => {
+            toast.success(`Transaction ${txnId} completed!`);
+            if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
+            onNavigate('water');
+          }}>Confirm & Finish</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col space-y-4 h-[calc(100vh-110px)] max-h-[760px]">
+      <div className="flex items-center gap-4 flex-shrink-0">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('water')} icon={<ChevronLeft className="w-4 h-4" />}>Back</Button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Point of Sale</h1>
+          <p className="text-xs text-slate-500 font-mono mt-0.5">{txnId} · {new Date().toLocaleDateString('en-PH')}</p>
+        </div>
+      </div>
+
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 min-h-0">
+        {/* LEFT PANEL */}
+        <div className="flex flex-col gap-6 overflow-y-auto pr-1 pb-4">
+          
+          {/* Customer Selection */}
+          <Card>
+            <CardHeader className="py-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-900 text-sm">Customer</h3>
+                <div className="flex gap-2">
+                  <Button size="xs" variant={!isNewCust ? 'primary' : 'outline'} onClick={() => { setIsNewCust(false); setSelectedCustomer(null); }}>Existing</Button>
+                  <Button size="xs" variant={isNewCust ? 'primary' : 'outline'} onClick={() => { setIsNewCust(true); setSelectedCustomer(null); }}>Walk-in / New</Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardBody className="py-4">
+              {!isNewCust ? (
+                <div className="space-y-3">
+                  <SearchBar value={custSearch} onChange={setCustSearch} placeholder="Search customer name or phone…" />
+                  {custSearch && !selectedCustomer && (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-48 overflow-y-auto">
+                      {filteredCusts.length === 0 ? (
+                        <div className="p-3 text-sm text-center text-slate-500">No customers found</div>
+                      ) : filteredCusts.map(c => (
+                        <button key={c.id} onClick={() => { setSelectedCustomer(c); setCustSearch(''); }}
+                          className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors">
+                          <p className="text-sm font-semibold text-slate-900">{c.firstName} {c.lastName}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{c.phone} · {c.address}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedCustomer && (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{selectedCustomer.firstName} {selectedCustomer.lastName}</p>
+                        <p className="text-xs text-slate-600 mt-0.5">{selectedCustomer.phone}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{selectedCustomer.address}</p>
+                      </div>
+                      <Button size="xs" variant="ghost" onClick={() => setSelectedCustomer(null)}>Change</Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <Input placeholder="Customer Name (optional for walk-in)" value={newCust.name} onChange={e => setNewCust(p=>({...p,name:e.target.value}))} className="col-span-2" />
+                  <Input placeholder="Phone Number" value={newCust.phone} onChange={e => setNewCust(p=>({...p,phone:e.target.value}))} />
+                  <Input placeholder="Address" value={newCust.address} onChange={e => setNewCust(p=>({...p,address:e.target.value}))} />
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+          {/* Delivery Toggle */}
+          <Card>
+            <CardBody className="p-1">
+              <button onClick={() => setDeliveryEnabled(p => !p)} className={`w-full flex justify-between items-center px-5 py-4 rounded-xl transition-all ${deliveryEnabled ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${deliveryEnabled ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
+                    <Truck className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className={`font-bold text-sm ${deliveryEnabled ? 'text-blue-900' : 'text-slate-800'}`}>Enable Delivery</p>
+                    <p className={`text-xs ${deliveryEnabled ? 'text-blue-600' : 'text-slate-500'}`}>Ship products to customer address</p>
+                  </div>
+                </div>
+                <div className={`relative w-12 h-6 rounded-full transition-colors ${deliveryEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${deliveryEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
+                </div>
+              </button>
+              
+              {deliveryEnabled && (
+                <div className="px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-4">
+                    <Textarea label="Delivery Address *" value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder="Enter full address…" rows={2} />
+                    <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 flex justify-between items-center">
+                      <span className="text-sm font-semibold text-blue-800">Calculated Delivery Fee</span>
+                      <span className="font-mono font-bold text-blue-900">{fmt.peso(deliveryFee)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+          {/* Products Grid */}
+          <Card className="flex-1 flex flex-col">
+            <CardHeader className="py-3 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-900 text-sm">Products</h3>
+                <div className="flex gap-2">
+                  {categories.map(cat => (
+                    <Button key={cat} size="xs" variant={activeCategory === cat ? 'primary' : 'outline'} onClick={() => setActiveCategory(cat)}>
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
+            <CardBody className="py-4 flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {(displayed as any[]).map((product: any) => {
+                  const inCart = cart.find(c => c.productId === product.id);
+                  return (
+                    <div key={product.id} onClick={() => addToCart(product)}
+                      className={`relative p-4 rounded-2xl border cursor-pointer transition-all ${inCart ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-sm'}`}>
+                      {inCart && (
+                        <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">{inCart.qty}</div>
+                      )}
+                      <div className="text-3xl mb-3">{product.icon}</div>
+                      <p className="text-sm font-bold text-slate-800 leading-tight mb-1 pr-6">{product.name}</p>
+                      <p className="text-xs font-bold text-slate-500">{fmt.peso(product.price)}</p>
+                      
+                      {inCart && (
+                        <div className="mt-3 pt-3 border-t border-blue-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => updateQty(product.id, inCart.qty - 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200">−</button>
+                          <span className="font-mono font-bold text-sm text-blue-900">{inCart.qty}</span>
+                          <button onClick={() => updateQty(product.id, inCart.qty + 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200">+</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+
+        {/* RIGHT PANEL — Cart & Payment */}
+        <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full">
+          {/* Cart Header */}
+          <div className="bg-slate-900 px-6 py-4 text-white flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-blue-400" />
+                <span className="font-bold tracking-wide">Current Order</span>
+              </div>
+              <Badge variant="blue" className="bg-slate-800 text-blue-400 border-none">{cart.reduce((a,c)=>a+c.qty,0)} Items</Badge>
+            </div>
+          </div>
+
+          {/* Cart Items */}
+          <div className="flex-1 overflow-y-auto min-h-0 bg-slate-50/50">
+            {cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                <ShoppingCart className="w-12 h-12 text-slate-200 mb-4" />
+                <p className="text-sm font-semibold text-slate-400">Cart is empty</p>
+                <p className="text-xs text-slate-400 mt-1">Select products from the left to begin.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {cart.map((c, i) => (
+                  <div key={i} className="p-4 bg-white">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="text-sm font-semibold text-slate-800 leading-tight">{c.name}</p>
+                      <button onClick={() => setCart(p => p.filter(x => x.productId !== c.productId))} className="text-slate-400 hover:text-red-500">
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-slate-500">{c.qty} × {fmt.peso(c.price)}</div>
+                      <span className="font-mono font-bold text-slate-900">{fmt.peso(c.subtotal)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Checkout Section */}
+          <div className="flex-shrink-0 border-t border-slate-200 bg-white">
+            <div className="px-6 py-4">
+              <div className="space-y-2 mb-4 text-sm">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal</span><span className="font-mono font-medium">{fmt.peso(cartSubtotal)}</span>
+                </div>
+                {deliveryEnabled && (
+                  <div className="flex justify-between text-blue-600 font-medium">
+                    <span>Delivery Fee</span><span className="font-mono">{fmt.peso(deliveryFee)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-end pt-3 border-t border-slate-100">
+                  <span className="font-bold text-slate-900">Total Amount</span>
+                  <span className="font-mono font-bold text-2xl text-slate-900 tracking-tight">{fmt.peso(total)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => setPaymentMethod('cash')} className={`py-2 rounded-xl text-xs font-bold border flex flex-col items-center gap-1.5 transition-all ${paymentMethod==='cash' ? 'bg-green-50 border-green-500 text-green-700 ring-1 ring-green-500' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                    <Banknote className="w-4 h-4" /> Cash
+                  </button>
+                  <button onClick={() => setPaymentMethod('gcash')} className={`py-2 rounded-xl text-xs font-bold border flex flex-col items-center gap-1.5 transition-all ${paymentMethod==='gcash' ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                    <Smartphone className="w-4 h-4" /> GCash
+                  </button>
+                  <button onClick={() => setPaymentMethod('unpaid')} className={`py-2 rounded-xl text-xs font-bold border flex flex-col items-center gap-1.5 transition-all ${paymentMethod==='unpaid' ? 'bg-red-50 border-red-500 text-red-700 ring-1 ring-red-500' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                    <AlertCircle className="w-4 h-4" /> Debt
+                  </button>
+                </div>
+
+                {(paymentMethod === 'cash' || paymentMethod === 'gcash') && (
+                  <div className="animate-in fade-in slide-in-from-bottom-2">
+                    <div className="relative mb-3">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">₱</span>
+                      <input type="number" value={amountReceived} min={0} onChange={e => setAmountReceived(e.target.value)} placeholder={total.toFixed(2)}
+                        className="w-full pl-10 pr-4 py-3 text-lg font-mono font-bold rounded-xl border border-slate-200 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-slate-50 focus:bg-white transition-all" />
+                    </div>
+                    {paymentMethod === 'gcash' && <Input placeholder="GCash Ref #" value={gcashRef} onChange={e=>setGcashRef(e.target.value)} className="mb-3" />}
+                    
+                    {received >= total && total > 0 && (
+                      <div className="flex justify-between items-center text-sm font-bold text-green-700 bg-green-50 px-4 py-2.5 rounded-xl border border-green-200">
+                        <span>Change</span><span className="font-mono text-base">{fmt.peso(change)}</span>
+                      </div>
+                    )}
+                    {received > 0 && received < total && (
+                      <div className="flex justify-between items-center text-sm font-bold text-red-700 bg-red-50 px-4 py-2.5 rounded-xl border border-red-200">
+                        <span>Balance</span><span className="font-mono text-base">{fmt.peso(balance)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {paymentMethod === 'unpaid' && (
+                  <div className="flex justify-between items-center text-sm font-bold text-red-700 bg-red-50 px-4 py-2.5 rounded-xl border border-red-200 mb-2">
+                    <span className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> Debt Balance</span><span className="font-mono text-base">{fmt.peso(total)}</span>
+                  </div>
+                )}
+
+                <Button variant="primary" size="lg" className="w-full justify-center !py-3.5" onClick={handleSave}>
+                  Complete Transaction
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

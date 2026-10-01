@@ -1,0 +1,441 @@
+import React, { useState } from 'react';
+import {
+  PageHeader, Card, CardHeader, CardBody, Badge, Button,
+  Modal, Input, Select, Textarea, SearchBar, useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr
+} from '../components/ui';
+import { fmt } from '../utils/formatters';
+import { payments } from '../data/payments';
+import { laundryOrders } from '../data/laundry';
+import { waterSales } from '../data/water';
+import {
+  Banknote, CreditCard, ChevronLeft, Plus, Smartphone,
+  ReceiptText, History, FileText, CheckCircle2, AlertCircle, XCircle
+} from 'lucide-react';
+import type { PageId } from '../components/Layout';
+
+interface Props { subPage: PageId; onNavigate: (p: PageId) => void; userName: string; }
+
+export default function PaymentPage({ subPage, onNavigate, userName }: Props) {
+  if (subPage === 'payments-new') return <RecordPaymentPage onNavigate={onNavigate} userName={userName} />;
+  return <PaymentLedger onNavigate={onNavigate} />;
+}
+
+// ─── Payment Ledger ───────────────────────────────────────────────────────────
+function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
+  const [search, setSearch] = useState('');
+  const [methodFilter, setMethodFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [viewPayment, setViewPayment] = useState<any>(null);
+
+  const totalCash = payments.filter(p => p.method === 'cash').reduce((a, p) => a + p.amount, 0);
+  const totalGcash = payments.filter(p => p.method === 'gcash').reduce((a, p) => a + p.amount, 0);
+  const totalRevenue = totalCash + totalGcash;
+
+  const debtRecords = payments.filter(p => p.type === 'debt' || p.status === 'unpaid');
+  const totalDebt = debtRecords.reduce((a, p) => a + p.balance, 0);
+
+  const filtered = payments.filter(p => {
+    const matchSearch = p.id.toLowerCase().includes(search.toLowerCase()) ||
+      (p.linkedTo && p.linkedTo.toLowerCase().includes(search.toLowerCase())) ||
+      p.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      p.processedBy.toLowerCase().includes(search.toLowerCase());
+    const matchMethod = methodFilter === 'all' || p.method === methodFilter || (methodFilter === 'unpaid' && p.method === 'unpaid');
+    const matchType = typeFilter === 'all' || p.type === typeFilter;
+    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
+    return matchSearch && matchMethod && matchType && matchStatus;
+  });
+
+  const methodBadge = (method: string) => {
+    if (method === 'gcash') return <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Smartphone className="w-3 h-3" /> GCASH</span>;
+    if (method === 'cash') return <span className="text-xs font-bold text-green-600 flex items-center gap-1"><Banknote className="w-3 h-3" /> CASH</span>;
+    return <span className="text-xs font-bold text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> UNPAID</span>;
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Payment Ledger" subtitle="Complete transaction trail — Cash, GCash, and Debt"
+        actions={
+          <Button onClick={() => onNavigate('payments-new')} icon={<Plus className="w-4 h-4" />}>
+            Record Payment or Debt
+          </Button>
+        } />
+
+      {/* KPI Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <KpiCard title="Total Collected" value={fmt.peso(totalRevenue)} icon={<Banknote className="w-5 h-5 text-slate-400" />}
+          subtext={`${payments.filter(p => p.status === 'paid').length} transactions`} />
+        <KpiCard title="Cash Collected" value={fmt.peso(totalCash)} icon={<Banknote className="w-5 h-5 text-slate-400" />}
+          subtext={`${payments.filter(p => p.method === 'cash').length} transactions`} />
+        <KpiCard title="GCash Collected" value={fmt.peso(totalGcash)} icon={<Smartphone className="w-5 h-5 text-slate-400" />}
+          subtext={`${payments.filter(p => p.method === 'gcash').length} transactions`} />
+        <KpiCard title="Outstanding Debt" value={fmt.peso(totalDebt)} icon={<AlertCircle className="w-5 h-5 text-slate-400" />}
+          subtext={`${debtRecords.length} unpaid records`} trend={{ value: 'Action needed', up: false }} />
+      </div>
+
+      {/* Ledger Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <SearchBar value={search} onChange={setSearch} placeholder="Search payment #, order #, or customer…" className="w-full sm:w-80" />
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <Select options={[
+                { label: 'All Payments', value: 'all' }, { label: 'Cash', value: 'cash' }, { label: 'GCash', value: 'gcash' }, { label: 'Unpaid / Debt', value: 'unpaid' }
+              ]} value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="w-36" />
+              <Select options={[
+                { label: 'All Types', value: 'all' }, { label: 'Laundry', value: 'laundry' }, { label: 'Water', value: 'water' }, { label: 'Debt Ledger', value: 'debt' }
+              ]} value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="w-36" />
+              <Select options={[
+                { label: 'All Statuses', value: 'all' }, { label: 'Paid', value: 'paid' }, { label: 'Partial', value: 'partial' }, { label: 'Debt', value: 'unpaid' }
+              ]} value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-36" />
+            </div>
+            <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
+          </div>
+        </CardHeader>
+        <div className="max-h-[320px] overflow-y-auto relative">
+          <Table>
+            <Thead>
+              <Tr>
+                <Th>Transaction ID</Th>
+                <Th>Customer</Th>
+                <Th>Type</Th>
+                <Th align="right">Amount</Th>
+                <Th align="right">Received</Th>
+                <Th align="right">Balance</Th>
+                <Th>Payment</Th>
+                <Th>Status</Th>
+                <Th>Date</Th>
+                <Th align="center">Actions</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {filtered.length === 0 ? (
+                <Tr><Td colSpan={10} align="center"><span className="text-slate-500 py-6 block">No payments match your filters</span></Td></Tr>
+              ) : filtered.map(pay => (
+                <Tr key={pay.id} onClick={() => setViewPayment(pay)}>
+                  <Td>
+                    <div className="font-mono text-xs font-semibold text-blue-600">{pay.id}</div>
+                    {pay.linkedTo && <div className="text-[10px] text-slate-400 font-mono mt-0.5">ref: {pay.linkedTo}</div>}
+                  </Td>
+                  <Td>
+                    <div className="font-medium text-slate-800">{pay.customerName}</div>
+                    {pay.description && <div className="text-[10px] text-slate-500 truncate max-w-[150px]">{pay.description}</div>}
+                  </Td>
+                  <Td>
+                    <Badge variant={pay.type === 'laundry' ? 'blue' : pay.type === 'water' ? 'green' : 'red'}>
+                      {pay.type === 'laundry' ? 'Laundry' : pay.type === 'water' ? 'Water' : 'Debt'}
+                    </Badge>
+                  </Td>
+                  <Td align="right" className="font-mono font-semibold text-slate-900">{fmt.peso(pay.amount)}</Td>
+                  <Td align="right" className="font-mono text-slate-600">{fmt.peso(pay.amtReceived)}</Td>
+                  <Td align="right" className={`font-mono font-bold ${pay.balance > 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                    {pay.balance > 0 ? fmt.peso(pay.balance) : '—'}
+                  </Td>
+                  <Td>{methodBadge(pay.method)}</Td>
+                  <Td>
+                    <Badge variant={pay.status === 'paid' ? 'paid' : pay.status === 'partial' ? 'partial' : 'unpaid'}>
+                      {pay.status === 'paid' ? 'Paid' : pay.status === 'partial' ? 'Partial' : pay.type === 'debt' ? 'Debt' : 'Unpaid'}
+                    </Badge>
+                  </Td>
+                  <Td className="text-xs text-slate-500 font-medium">{fmt.datetime(pay.date)}</Td>
+                  <Td align="center">
+                    <Button size="xs" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewPayment(pay); }} icon={<ReceiptText className="w-4 h-4 text-slate-500" />} title="View Details" />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </div>
+      </Card>
+
+      {/* Payment Detail Modal */}
+      {viewPayment && (
+        <Modal open={!!viewPayment} onClose={() => setViewPayment(null)} title="Transaction Details" size="md"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setViewPayment(null)}>Close</Button>
+              <Button variant="outline" icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+            </>
+          }>
+          <div className="space-y-5">
+            {/* Header section */}
+            <div className="flex justify-between items-start pb-4 border-b border-slate-100">
+              <div>
+                <p className="text-xl font-bold text-slate-900 tracking-tight">{fmt.peso(viewPayment.amount)}</p>
+                <p className="text-sm text-slate-500 mt-1">{viewPayment.customerName}</p>
+                {viewPayment.description && <p className="text-xs text-slate-400 mt-0.5">{viewPayment.description}</p>}
+              </div>
+              <Badge variant={viewPayment.status === 'paid' ? 'paid' : viewPayment.status === 'partial' ? 'partial' : 'unpaid'}>
+                {viewPayment.status.toUpperCase()}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Transaction ID</p>
+                <p className="font-mono text-slate-800">{viewPayment.id}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Date & Time</p>
+                <p className="text-slate-800">{fmt.datetime(viewPayment.date)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Method</p>
+                <div>{methodBadge(viewPayment.method)}</div>
+              </div>
+              {viewPayment.gcashRef && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Reference No.</p>
+                  <p className="font-mono text-slate-800">{viewPayment.gcashRef}</p>
+                </div>
+              )}
+              {viewPayment.linkedTo && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Linked Order</p>
+                  <p className="font-mono text-blue-600">{viewPayment.linkedTo}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Processed By</p>
+                <p className="text-slate-800">{viewPayment.processedBy}</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+              <StatRow label="Total Amount" value={fmt.peso(viewPayment.amount)} mono />
+              <StatRow label="Amount Received" value={fmt.peso(viewPayment.amtReceived)} mono />
+              {viewPayment.change > 0 && <StatRow label="Change Given" value={fmt.peso(viewPayment.change)} mono />}
+              {viewPayment.balance > 0 && (
+                <div className="pt-2 mt-2 border-t border-slate-200">
+                  <StatRow label="Unpaid Balance (Debt)" value={<span className="font-bold text-red-600">{fmt.peso(viewPayment.balance)}</span>} mono />
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── Record Payment ───────────────────────────────────────────────────────────
+function RecordPaymentPage({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
+  const toast = useToast();
+  const [recordType, setRecordType] = useState<'laundry' | 'water' | 'debt'>('laundry');
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [orderSearch, setOrderSearch] = useState('');
+
+  // Payment states
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash' | 'unpaid' | ''>('');
+  const [amountReceived, setAmountReceived] = useState('');
+  const [gcashRef, setGcashRef] = useState('');
+
+  // Debt specific states
+  const [debtCustomer, setDebtCustomer] = useState('');
+  const [debtAmount, setDebtAmount] = useState('');
+  const [debtDesc, setDebtDesc] = useState('');
+
+  const orders = recordType === 'laundry'
+    ? laundryOrders.filter(o => !['released', 'cancelled'].includes(o.status) && o.paymentStatus !== 'paid')
+    : recordType === 'water' ? waterSales : [];
+
+  const filteredOrders = orders.filter((o: any) =>
+    o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
+    o.customerName.toLowerCase().includes(orderSearch.toLowerCase())
+  );
+
+  const isDebtMode = recordType === 'debt';
+
+  const total = isDebtMode ? (parseFloat(debtAmount) || 0) : (selectedOrder?.total || 0);
+  const alreadyPaid = isDebtMode ? 0 : (selectedOrder?.paid || selectedOrder?.amtPaid || 0);
+  const outstanding = Math.max(0, total - alreadyPaid);
+  const received = parseFloat(amountReceived) || 0;
+  const change = paymentMethod === 'unpaid' ? 0 : Math.max(0, received - outstanding);
+  const balance = paymentMethod === 'unpaid' ? outstanding : Math.max(0, outstanding - received);
+
+  const handleSubmit = () => {
+    if (isDebtMode) {
+      if (!debtCustomer.trim()) { toast.error('Enter customer name.'); return; }
+      if (!debtAmount || parseFloat(debtAmount) <= 0) { toast.error('Enter valid debt amount.'); return; }
+      if (!debtDesc.trim()) { toast.error('Enter a description for the debt.'); return; }
+      toast.success(`Debt record created for ${debtCustomer}`);
+    } else {
+      if (!selectedOrder) { toast.error('Select an order first.'); return; }
+      if (!paymentMethod) { toast.error('Select a payment method.'); return; }
+      if (paymentMethod !== 'unpaid' && (!amountReceived || received <= 0)) { toast.error('Enter amount received.'); return; }
+      if (paymentMethod === 'gcash' && !gcashRef) { toast.error('Enter GCash reference number.'); return; }
+
+      const status = paymentMethod === 'unpaid' ? 'unpaid' : (received >= outstanding ? 'paid' : 'partial');
+      toast.success(`Payment recorded for ${selectedOrder.id}. Status: ${status.toUpperCase()}`);
+      if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
+    }
+    onNavigate('payments');
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('payments')} icon={<ChevronLeft className="w-4 h-4" />}>
+          Back
+        </Button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Record Transaction</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Process payment or record a customer debt</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardBody className="p-1.5 flex gap-1 bg-slate-100 rounded-xl">
+          <button onClick={() => { setRecordType('laundry'); setSelectedOrder(null); setPaymentMethod(''); }}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${recordType === 'laundry' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+            🧺 Laundry Order
+          </button>
+          <button onClick={() => { setRecordType('water'); setSelectedOrder(null); setPaymentMethod(''); }}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${recordType === 'water' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+            💧 Water Sale
+          </button>
+          <button onClick={() => { setRecordType('debt'); setSelectedOrder(null); setPaymentMethod('unpaid'); }}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${recordType === 'debt' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+            ⚠️ Record Debt
+          </button>
+        </CardBody>
+      </Card>
+
+      {isDebtMode ? (
+        <Card>
+          <CardHeader><h3 className="font-semibold text-slate-900">New Debt Record</h3></CardHeader>
+          <CardBody className="space-y-4">
+            <Input label="Customer Name" placeholder="Enter customer name" value={debtCustomer} onChange={e => setDebtCustomer(e.target.value)} />
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Debt Amount (₱)</label>
+              <Input type="number" placeholder="0.00" value={debtAmount} onChange={e => setDebtAmount(e.target.value)} />
+            </div>
+            <Textarea label="Description / Reason" placeholder="E.g., Unpaid balance for laundry..." value={debtDesc} onChange={e => setDebtDesc(e.target.value)} rows={3} />
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100 mt-4 flex gap-3 items-start">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-red-800">Debt Creation Notice</p>
+                <p className="text-xs text-red-600 mt-1">This will create a standalone debt record in the ledger. The customer will owe the specified amount until paid.</p>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <CardHeader><h3 className="font-semibold text-slate-900">Find Order</h3></CardHeader>
+            <CardBody>
+              <SearchBar value={orderSearch} onChange={setOrderSearch} placeholder="Search by order # or customer name…" />
+              <div className="mt-4 max-h-60 overflow-y-auto pr-2 space-y-2">
+                {filteredOrders.map((o: any) => (
+                  <button key={o.id} onClick={() => setSelectedOrder(o)}
+                    className={`w-full text-left p-3 rounded-xl border text-sm transition-all ${selectedOrder?.id === o.id ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-mono font-semibold text-slate-900 text-xs">{o.id}</span>
+                        <span className="ml-3 font-medium text-slate-600">{o.customerName}</span>
+                      </div>
+                      <div className="text-right flex items-center gap-3">
+                        <span className="font-mono font-bold text-slate-900">{fmt.peso(o.total)}</span>
+                        <Badge variant={o.paymentStatus === 'paid' ? 'paid' : o.paymentStatus === 'partial' ? 'partial' : 'unpaid'}>
+                          {o.paymentStatus || 'unpaid'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                {filteredOrders.length === 0 && <div className="text-center text-slate-400 py-6 text-sm">No pending orders found.</div>}
+              </div>
+            </CardBody>
+          </Card>
+
+          {selectedOrder && (
+            <Card>
+              <CardHeader><h3 className="font-semibold text-slate-900">Process Payment</h3></CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-2 gap-4 text-sm p-4 bg-slate-50 rounded-xl mb-6 border border-slate-100">
+                  <StatRow label="Order #" value={<span className="font-mono text-blue-600">{selectedOrder.id}</span>} />
+                  <StatRow label="Outstanding Balance" value={<span className="font-mono font-bold text-red-600 text-base">{fmt.peso(outstanding)}</span>} />
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-2 block">Payment Method</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <button onClick={() => setPaymentMethod('cash')}
+                        className={`py-3 rounded-xl text-sm font-semibold border transition-all flex flex-col items-center justify-center gap-2 ${paymentMethod === 'cash' ? 'bg-green-50 text-green-700 border-green-500 ring-1 ring-green-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <Banknote className="w-5 h-5" /> Cash
+                      </button>
+                      <button onClick={() => setPaymentMethod('gcash')}
+                        className={`py-3 rounded-xl text-sm font-semibold border transition-all flex flex-col items-center justify-center gap-2 ${paymentMethod === 'gcash' ? 'bg-blue-50 text-blue-700 border-blue-500 ring-1 ring-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <Smartphone className="w-5 h-5" /> GCash
+                      </button>
+                      <button onClick={() => setPaymentMethod('unpaid')}
+                        className={`py-3 rounded-xl text-sm font-semibold border transition-all flex flex-col items-center justify-center gap-2 ${paymentMethod === 'unpaid' ? 'bg-red-50 text-red-700 border-red-500 ring-1 ring-red-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <AlertCircle className="w-5 h-5" /> Mark as Debt
+                      </button>
+                    </div>
+                  </div>
+
+                  {(paymentMethod === 'cash' || paymentMethod === 'gcash') && (
+                    <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1.5 block">Amount Received (₱)</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-lg">₱</span>
+                          <input type="number" value={amountReceived} min={0}
+                            onChange={e => setAmountReceived(e.target.value)}
+                            placeholder={outstanding.toFixed(2)}
+                            className="w-full pl-9 pr-4 py-3.5 text-lg font-mono font-bold rounded-xl border border-slate-200 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      {paymentMethod === 'gcash' && (
+                        <Input label="GCash Reference No." placeholder="e.g. 00012345678" value={gcashRef} onChange={e => setGcashRef(e.target.value)} />
+                      )}
+
+                      {received > 0 && (
+                        <div className={`p-4 rounded-xl border ${received >= outstanding ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                          {received >= outstanding ? (
+                            <div className="flex justify-between items-center text-green-800">
+                              <span className="font-semibold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Change Due</span>
+                              <span className="font-mono font-bold text-xl">{fmt.peso(change)}</span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-center text-amber-800">
+                              <span className="font-semibold flex items-center gap-2"><AlertCircle className="w-4 h-4" /> Remaining Debt</span>
+                              <span className="font-mono font-bold text-xl">{fmt.peso(balance)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {paymentMethod === 'unpaid' && (
+                    <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-red-800 flex items-start gap-3 mt-4 animate-in fade-in slide-in-from-top-2">
+                      <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Marking as unpaid debt</p>
+                        <p className="text-sm mt-1">This order will be added to the debt ledger with an outstanding balance of <span className="font-mono font-bold">{fmt.peso(outstanding)}</span>.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardBody>
+            </Card>
+          )}
+        </>
+      )}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button variant="ghost" onClick={() => onNavigate('payments')}>Cancel</Button>
+        <Button variant="primary" onClick={handleSubmit}
+          disabled={isDebtMode ? false : (!selectedOrder || !paymentMethod || (paymentMethod !== 'unpaid' && !amountReceived))}>
+          {isDebtMode ? 'Create Debt Record' : 'Confirm Transaction'}
+        </Button>
+      </div>
+    </div>
+  );
+}

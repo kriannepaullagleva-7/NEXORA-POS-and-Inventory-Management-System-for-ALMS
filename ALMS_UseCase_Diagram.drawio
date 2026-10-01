@@ -1,0 +1,202 @@
+<mxfile host="app.diagrams.net" modified="2026-09-30T00:00:00.000Z" agent="5.0" etag="1.0" version="24.0.0" type="device">
+  <diagram id="usecase_diagram" name="ALMS Use Case Diagram">
+    <mxGraphModel dx="2500" dy="1800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" background="white" math="0" shadow="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- System Boundary -->
+        <mxCell id="system_boundary" value="ALMS (Aqua Laundry Management System)" style="shape=rectangle;html=1;verticalAlign=top;verticalLabelPosition=top;align=left;spacingTop=20;spacingLeft=10;fontStyle=1;fontSize=14;rounded=1;strokeWidth=3;strokeColor=#1a1a1a;fillColor=none;" parent="1" vertex="1">
+          <mxGeometry x="300" y="50" width="1050" height="1050" as="geometry"/>
+        </mxCell>
+
+        <!-- STAFF ACTOR (Left side) -->
+        <mxCell id="staff_actor" value="Staff" style="shape=ellipse;html=1;verticalAlign=middle;align=center;fontStyle=1;fontSize=12;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f0f0f0;" parent="1" vertex="1">
+          <mxGeometry x="80" y="450" width="120" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- ADMIN ACTOR (Right side) -->
+        <mxCell id="admin_actor" value="Admin" style="shape=ellipse;html=1;verticalAlign=middle;align=center;fontStyle=1;fontSize=12;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f0f0f0;" parent="1" vertex="1">
+          <mxGeometry x="1380" y="450" width="120" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- CUSTOMER ACTOR (Top right) -->
+        <mxCell id="customer_actor" value="Customer" style="shape=ellipse;html=1;verticalAlign=middle;align=center;fontStyle=1;fontSize=12;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f0f0f0;" parent="1" vertex="1">
+          <mxGeometry x="1380" y="150" width="120" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- MANAGER ACTOR (Bottom right) -->
+        <mxCell id="manager_actor" value="Manager" style="shape=ellipse;html=1;verticalAlign=middle;align=center;fontStyle=1;fontSize=12;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f0f0f0;" parent="1" vertex="1">
+          <mxGeometry x="1380" y="750" width="120" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- ============= STAFF USE CASES ============= -->
+
+        <!-- 1. Laundry Operations -->
+        <mxCell id="uc_laundry_ops" value="Laundry Operations" style="ellipse;html=1;align=center;fontSize=11;fontStyle=1;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#e6e6e6;" parent="1" vertex="1">
+          <mxGeometry x="350" y="100" width="150" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- 1.1 Create Laundry Order -->
+        <mxCell id="uc_create_laundry" value="Create Laundry Order" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="320" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 1.2 Track Order Status -->
+        <mxCell id="uc_track_laundry" value="Track Order Status" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="480" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 1.3 Update Order Status -->
+        <mxCell id="uc_update_laundry_status" value="Update Order Status" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="320" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 1.4 Generate Receipt -->
+        <mxCell id="uc_gen_receipt_laundry" value="Generate Receipt" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="480" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Include relationships for Laundry -->
+        <mxCell id="rel_laundry_1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_laundry_ops" target="uc_create_laundry" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_laundry_2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_laundry_ops" target="uc_track_laundry" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_laundry_3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_laundry_ops" target="uc_update_laundry_status" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_laundry_4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_laundry_ops" target="uc_gen_receipt_laundry" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 2. Water Refilling Operations -->
+        <mxCell id="uc_water_ops" value="Water Refilling Operations" style="ellipse;html=1;align=center;fontSize=11;fontStyle=1;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#e6e6e6;" parent="1" vertex="1">
+          <mxGeometry x="620" y="100" width="150" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- 2.1 Create Water Order -->
+        <mxCell id="uc_create_water" value="Create Water Order" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="590" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 2.2 Select Delivery Type -->
+        <mxCell id="uc_delivery_type" value="Select Delivery Type" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="750" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 2.3 Update Water Status -->
+        <mxCell id="uc_update_water_status" value="Update Water Status" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="590" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 2.4 Track Delivery -->
+        <mxCell id="uc_track_delivery" value="Track Delivery" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor=#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="750" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Include relationships for Water -->
+        <mxCell id="rel_water_1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_water_ops" target="uc_create_water" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_water_2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_water_ops" target="uc_delivery_type" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_water_3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_water_ops" target="uc_update_water_status" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_water_4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_water_ops" target="uc_track_delivery" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 3. Payment Management -->
+        <mxCell id="uc_payment_mgmt" value="Payment Management" style="ellipse;html=1;align=center;fontSize=11;fontStyle=1;strokeWidth=2;strokeColor:#1a1a1a;fillColor=#e6e6e6;" parent="1" vertex="1">
+          <mxGeometry x="890" y="100" width="150" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- 3.1 Record Payment -->
+        <mxCell id="uc_record_payment" value="Record Payment" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="860" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 3.2 Select Payment Method -->
+        <mxCell id="uc_payment_method" value="Select Payment Method" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="1020" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 3.3 View Payment History -->
+        <mxCell id="uc_payment_history" value="View Payment History" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="860" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 3.4 Calculate Change -->
+        <mxCell id="uc_calc_change" value="Calculate Change" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="1020" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Include relationships for Payment -->
+        <mxCell id="rel_payment_1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_payment_mgmt" target="uc_record_payment" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_payment_2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_payment_mgmt" target="uc_payment_method" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_payment_3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_payment_mgmt" target="uc_payment_history" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_payment_4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_payment_mgmt" target="uc_calc_change" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 4. Inventory Management -->
+        <mxCell id="uc_inventory_mgmt" value="Inventory Management" style="ellipse;html=1;align=center;fontSize=11;fontStyle=1;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#e6e6e6;" parent="1" vertex="1">
+          <mxGeometry x="1160" y="100" width="150" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- 4.1 View Inventory Levels -->
+        <mxCell id="uc_view_inventory" value="View Stock Levels" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor=#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="1130" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 4.2 Record Stock Movement -->
+        <mxCell id="uc_stock_movement" value="Record Stock Movement" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="1290" y="220" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 4.3 Check Low Stock Alerts -->
+        <mxCell id="uc_low_stock" value="Check Low Stock Alerts" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="1130" y="320" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Include relationships for Inventory -->
+        <mxCell id="rel_inventory_1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_inventory_mgmt" target="uc_view_inventory" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_inventory_2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_inventory_mgmt" target="uc_stock_movement" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="rel_inventory_3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor:#1a1a1a;dashed=1;dashPattern=1 3;" parent="1" source="uc_inventory_mgmt" target="uc_low_stock" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============= ADMIN ONLY USE CASES ============= -->
+
+        <!-- 5. Finance Management -->
+        <mxCell id="uc_finance_mgmt" value="Finance Management" style="ellipse;html=1;align=center;fontSize=11;fontStyle=1;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#e6e6e6;" parent="1" vertex="1">
+          <mxGeometry x="350" y="520" width="150" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- 5.1 Record Expenses -->
+        <mxCell id="uc_record_expense" value="Record Expenses" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="320" y="640" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 5.2 View P&L Report -->
+        <mxCell id="uc_view_pl" value="View P&L Report" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="480" y="640" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 5.3 Financial Analysis -->
+        <mxCell id="uc_financial_analysis" value="Financial Analysis" style="ellipse;html=1;align=center;fontSize=10;strokeWidth=2;strokeColor:#1a1a1a;fillColor:#f5f5f5;" parent="1" vertex="1">
+          <mxGeometry x="320" y="740" width="140" height="60" as="geometry"/>
