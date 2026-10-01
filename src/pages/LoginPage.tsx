@@ -34,7 +34,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     <div className="min-h-screen flex bg-slate-100 font-sans">
       {/* Left branding panel - Clean & Minimal */}
       <div className="hidden lg:flex flex-col justify-between w-1/2 p-12 bg-slate-900 border-r border-slate-800 relative overflow-hidden">
-        
+
         {/* Subtle background element */}
         <div className="absolute top-[-20%] left-[-10%] w-[120%] h-[120%] bg-gradient-to-br from-blue-900/20 to-transparent pointer-events-none rounded-full blur-3xl opacity-50"></div>
 
@@ -63,7 +63,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Owner / Administrator</p>
               <p className="text-white font-bold text-base tracking-tight">Aedzel Louis M. Sarmiento</p>
             </div>
-            
+
             <div className="flex items-start gap-4 pt-2">
               <MapPin className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
               <div className="font-medium">
@@ -77,7 +77,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <Phone className="w-5 h-5 text-slate-500 flex-shrink-0" />
               <p className="font-medium">(082) 222-4570 &nbsp;<span className="text-slate-600">|</span>&nbsp; 0932-854-5660</p>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <Mail className="w-5 h-5 text-slate-500 flex-shrink-0" />
               <p className="font-medium text-blue-400 hover:text-blue-300 transition-colors cursor-pointer">almswaterrefillingstation@gmail.com</p>
@@ -89,7 +89,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </a>
           </div>
         </div>
-        
+
         <div className="text-center z-10 w-full mt-auto pt-10">
           <p className="text-[11px] text-slate-500 font-medium tracking-wide">
             Powered by <span className="text-slate-300 font-bold tracking-widest">NEXORA</span>
@@ -126,7 +126,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               onChange={e => setUsername(e.target.value)}
               icon={<User className="w-4 h-4" />}
             />
-            
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">Password</label>
               <div className="relative">
@@ -166,7 +166,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
           </div>
-          
+
           <div className="lg:hidden text-center mt-12">
             <p className="text-[10px] text-slate-400 font-medium tracking-wide">
               Powered by <span className="text-slate-500 font-bold tracking-widest">NEXORA</span>

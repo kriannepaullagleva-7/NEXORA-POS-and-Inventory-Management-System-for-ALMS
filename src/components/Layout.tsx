@@ -185,7 +185,7 @@ export default function Layout() {
             </div>
             <div>
               <div className="text-white font-bold text-sm tracking-wide">ALMS POS</div>
-              <div className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest">System</div>
+              <div className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest leading-tight mt-0.5">and Inventory Management System</div>
             </div>
           </div>
           <button className="lg:hidden text-slate-400 hover:text-white" onClick={() => setSidebarOpen(false)}>
@@ -259,7 +259,7 @@ export default function Layout() {
               <Menu className="w-5 h-5" />
             </button>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">{pageTitle[currentPath] ?? 'ALMS POS'}</h2>
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">{pageTitle[currentPath] ?? 'ALMS POS and Inventory Management System'}</h2>
               <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 hidden sm:block">
                 {new Date().toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
               </p>
