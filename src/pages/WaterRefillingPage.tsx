@@ -1,16 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Input, Textarea,
+  Table, Thead, Tbody, Th, Td, Tr, Modal, Confirm, Input, Textarea,
   SearchBar, useToast, KpiCard, StatRow,
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { waterProducts, waterSales } from '../data/water';
+import { printReceipt } from '../utils/pdf';
+import { waterSales } from '../data/water';
 import { customers } from '../data/customers';
-import { 
-  Droplets, Banknote, Smartphone, ShoppingCart, 
+import { useProducts } from '../context/DataContext';
+import { DELIVERY_FEE_CATEGORIES } from '../data/products';
+import ProductCatalog from '../components/ProductCatalog';
+import {
+  Droplets, Banknote, Smartphone, ShoppingCart,
   Search, Plus, MapPin, Truck, ChevronLeft, Droplet, CheckCircle2,
-  AlertCircle, ReceiptText, XCircle
+  AlertCircle, ReceiptText, XCircle, ImageOff
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -19,14 +23,37 @@ interface Props { subPage: PageId; onNavigate: (p: PageId) => void; userName: st
 
 export default function WaterRefillingPage({ subPage, onNavigate, userName }: Props) {
   if (subPage === 'water-new') return <WaterPOS onNavigate={onNavigate} userName={userName} />;
+  if (subPage === 'water-products') return <ProductCatalog module="water" />;
   return <WaterDashboard onNavigate={onNavigate} />;
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('today');
   const [viewSale, setViewSale] = useState<any>(null);
+  const [confirmReprint, setConfirmReprint] = useState(false);
+
+  const reprintReceipt = (sale: any) => {
+    printReceipt({
+      businessName: 'ALMS Water Refilling',
+      tagline: 'Alkaline • Purified • Mineral',
+      txnId: sale.id,
+      dateTime: fmt.datetime(sale.date),
+      cashier: sale.processedBy,
+      customer: sale.customerName,
+      items: sale.items.map((i: any) => ({ name: i.name, qty: i.qty, price: i.price, subtotal: i.subtotal })),
+      deliveryFee: sale.deliveryFee > 0 ? sale.deliveryFee : undefined,
+      discount: sale.discount > 0 ? sale.discount : undefined,
+      total: sale.total,
+      paymentMethod: sale.paymentMethod,
+      amountReceived: sale.amtPaid,
+      change: sale.change > 0 ? sale.change : undefined,
+      gcashRef: sale.gcashRef || undefined,
+    });
+    toast.success(`Receipt for ${sale.id} downloaded.`);
+  };
 
   const todaySales = waterSales.filter(s => s.date.startsWith('2026-09-29'));
   const todayCash  = todaySales.filter(s => s.paymentMethod === 'cash').reduce((a, s) => a + s.total, 0);
@@ -78,8 +105,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
           </div>
         </CardHeader>
-        <div className="max-h-[300px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={300}>
             <Thead>
               <Tr>
               <Th>Transaction ID</Th>
@@ -121,8 +147,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               </Tr>
             ))}
           </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
 
       {/* Sale Detail Modal */}
@@ -131,7 +156,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           footer={
             <>
               <Button variant="ghost" onClick={() => setViewSale(null)}>Close</Button>
-              <Button variant="outline" icon={<ReceiptText className="w-4 h-4" />}>Reprint Receipt</Button>
+              <Button variant="outline" onClick={() => setConfirmReprint(true)} icon={<ReceiptText className="w-4 h-4" />}>Reprint Receipt</Button>
             </>
           }>
           <div className="space-y-5">
@@ -204,6 +229,15 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           </div>
         </Modal>
       )}
+
+      <Confirm
+        open={confirmReprint}
+        onClose={() => setConfirmReprint(false)}
+        onConfirm={() => viewSale && reprintReceipt(viewSale)}
+        title="Reprint Receipt?"
+        message={`Generate an 80mm receipt PDF for transaction ${viewSale?.id ?? ''}.`}
+        confirmLabel="Reprint Receipt"
+      />
     </div>
   );
 }
@@ -213,6 +247,8 @@ interface CartLine { productId: string; name: string; price: number; qty: number
 
 function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
   const toast = useToast();
+  const { byModule } = useProducts();
+  const waterProducts = byModule('water').filter(p => p.active);
 
   const [custSearch, setCustSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
@@ -230,14 +266,14 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
 
   const [activeCategory, setActiveCategory] = useState('All');
   const [showReceipt, setShowReceipt] = useState(false);
+  const [confirmPrint, setConfirmPrint] = useState(false);
   const [txnId] = useState(`WAT-TXN-${String(Math.floor(Math.random()*900)+100)}`);
 
   // Compute dynamic delivery fee based on gallons
   const deliveryFee = useMemo(() => {
     if (!deliveryEnabled) return 0;
     const gallonCount = cart.reduce((acc, item) => {
-      // Assuming 20L or 10L gallons are what counts for delivery fee
-      if (item.category === 'Gallon') return acc + item.qty;
+      if (DELIVERY_FEE_CATEGORIES.includes(item.category)) return acc + item.qty;
       return acc;
     }, 0);
     
@@ -258,8 +294,8 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
     c.phone.includes(custSearch)
   );
 
-  const categories = ['All', ...Array.from(new Set((waterProducts as any[]).map((p: any) => p.category)))];
-  const displayed = activeCategory === 'All' ? waterProducts : (waterProducts as any[]).filter((p: any) => p.category === activeCategory);
+  const categories = ['All', ...Array.from(new Set(waterProducts.map(p => p.category)))];
+  const displayed = activeCategory === 'All' ? waterProducts : waterProducts.filter(p => p.category === activeCategory);
 
   const addToCart = (product: any) => {
     setCart(prev => {
@@ -384,13 +420,40 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
         </div>
         
         <div className="flex gap-3 mt-6">
-          <Button variant="outline" className="flex-1 justify-center" onClick={() => toast.info('Printing receipt…')} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+          <Button variant="outline" className="flex-1 justify-center" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
           <Button variant="primary" className="flex-1 justify-center" onClick={() => {
             toast.success(`Transaction ${txnId} completed!`);
             if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
             onNavigate('water');
           }}>Confirm & Finish</Button>
         </div>
+
+        <Confirm
+          open={confirmPrint}
+          onClose={() => setConfirmPrint(false)}
+          onConfirm={() => {
+            printReceipt({
+              businessName: 'ALMS Water Refilling',
+              tagline: 'Alkaline • Purified • Mineral',
+              txnId,
+              dateTime: new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+              cashier: userName,
+              customer: custName || 'Walk-in Customer',
+              items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price, subtotal: c.subtotal })),
+              deliveryFee: deliveryEnabled && deliveryFee > 0 ? deliveryFee : undefined,
+              total,
+              paymentMethod: paymentMethod || 'unpaid',
+              amountReceived: paymentMethod !== 'unpaid' ? received : undefined,
+              change: change > 0 ? change : undefined,
+              balance: balance > 0 ? balance : undefined,
+              gcashRef: gcashRef || undefined,
+            });
+            toast.success('Receipt downloaded.');
+          }}
+          title="Print Receipt?"
+          message={`Generate an 80mm receipt PDF for transaction ${txnId}.`}
+          confirmLabel="Print Receipt"
+        />
       </div>
     );
   }
@@ -506,7 +569,12 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
             </CardHeader>
             <CardBody className="py-4 flex-1 overflow-y-auto">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {(displayed as any[]).map((product: any) => {
+                {displayed.length === 0 ? (
+                  <div className="col-span-full flex flex-col items-center justify-center py-10 text-center text-slate-400">
+                    <ImageOff className="w-8 h-8 mb-2" />
+                    <p className="text-sm font-medium">No products in this category yet.</p>
+                  </div>
+                ) : displayed.map(product => {
                   const inCart = cart.find(c => c.productId === product.id);
                   return (
                     <div key={product.id} onClick={() => addToCart(product)}
@@ -514,10 +582,19 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
                       {inCart && (
                         <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">{inCart.qty}</div>
                       )}
-                      <div className="text-3xl mb-3">{product.icon}</div>
+                      <div className="w-12 h-12 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-center overflow-hidden mb-3">
+                        {product.image ? (
+                          <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-2xl">{product.icon}</span>
+                        )}
+                      </div>
                       <p className="text-sm font-bold text-slate-800 leading-tight mb-1 pr-6">{product.name}</p>
-                      <p className="text-xs font-bold text-slate-500">{fmt.peso(product.price)}</p>
-                      
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-500">{fmt.peso(product.price)}</p>
+                        <Badge variant="gray" className="text-[10px]">{product.category}</Badge>
+                      </div>
+
                       {inCart && (
                         <div className="mt-3 pt-3 border-t border-blue-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
                           <button onClick={() => updateQty(product.id, inCart.qty - 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200">−</button>

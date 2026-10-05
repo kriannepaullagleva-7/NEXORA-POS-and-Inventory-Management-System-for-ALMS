@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Input, Textarea,
+  Table, Thead, Tbody, Th, Td, Tr, Modal, Confirm, Input, Textarea,
   SearchBar, useToast, KpiCard, StatRow
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { laundryOrders, laundryServices, laundryAddons } from '../data/laundry';
+import { printReceipt } from '../utils/pdf';
+import { laundryOrders, laundryAddons } from '../data/laundry';
 import { customers } from '../data/customers';
-import { 
-  WashingMachine, Banknote, Smartphone, ShoppingCart, 
-  Search, Plus, MapPin, Truck, ChevronLeft, Droplet, 
+import { useProducts } from '../context/DataContext';
+import ProductCatalog from '../components/ProductCatalog';
+import {
+  WashingMachine, Banknote, Smartphone, ShoppingCart,
+  Search, Plus, MapPin, Truck, ChevronLeft, Droplet,
   CheckCircle2, AlertCircle, ReceiptText, Tag, Clock, Package,
   History, Shirt, PlusCircle, MinusCircle, XCircle
 } from 'lucide-react';
@@ -21,6 +24,7 @@ interface Props { subPage: PageId; onNavigate: (p: PageId) => void; userName: st
 export default function LaundryPage({ subPage, onNavigate, userName }: Props) {
   if (subPage === 'laundry-new') return <LaundryPOS onNavigate={onNavigate} userName={userName} />;
   if (subPage === 'laundry-history') return <LaundryHistoryPage onNavigate={onNavigate} />;
+  if (subPage === 'laundry-services') return <ProductCatalog module="laundry" />;
   return <OrderTrackerPage onNavigate={onNavigate} />;
 }
 
@@ -45,7 +49,31 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
   const [viewOrder, setViewOrder] = useState<any>(null);
+  const [confirmPrint, setConfirmPrint] = useState(false);
   const toast = useToast();
+
+  const printOrderReceipt = (order: any) => {
+    printReceipt({
+      businessName: 'ALMS Laundry Shop',
+      tagline: 'Professional Care',
+      txnId: order.id,
+      dateTime: fmt.datetime(order.date),
+      cashier: order.processedBy,
+      customer: order.customerName,
+      items: [
+        ...order.services.map((s: any) => ({ name: s.name, qty: s.qty, unit: s.unit, price: s.price, subtotal: s.subtotal })),
+        ...order.addons.map((a: any) => ({ name: a.name, qty: a.qty || 1, price: a.price, subtotal: a.subtotal })),
+      ],
+      discount: order.discount > 0 ? order.discount : undefined,
+      total: order.total,
+      paymentMethod: order.paymentMethod || 'unpaid',
+      amountReceived: order.paid,
+      change: order.change > 0 ? order.change : undefined,
+      balance: order.paymentStatus !== 'paid' ? order.total - order.paid : undefined,
+      gcashRef: order.gcashRef || undefined,
+    });
+    toast.success(`Receipt for ${order.id} downloaded.`);
+  };
 
   const counts = {
     all: orders.length,
@@ -121,8 +149,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         <CardHeader>
           <SearchBar value={search} onChange={setSearch} placeholder="Search by order # or customer name…" className="w-full sm:w-80" />
         </CardHeader>
-        <div className="max-h-[350px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={350}>
             <Thead>
             <Tr>
               <Th>Order ID</Th>
@@ -167,8 +194,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               </Tr>
             ))}
           </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
 
       {/* Order Detail Modal */}
@@ -259,7 +285,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             )}
             
             <div className="flex justify-between items-center pt-2">
-              <Button variant="outline" size="sm" icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
               {!['released', 'cancelled'].includes(viewOrder.status) && (
                 <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => cancelOrder(viewOrder)}>Cancel Order</Button>
               )}
@@ -267,6 +293,15 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           </div>
         </Modal>
       )}
+
+      <Confirm
+        open={confirmPrint}
+        onClose={() => setConfirmPrint(false)}
+        onConfirm={() => viewOrder && printOrderReceipt(viewOrder)}
+        title="Print Receipt?"
+        message={`Generate an 80mm receipt PDF for order ${viewOrder?.id ?? ''}.`}
+        confirmLabel="Print Receipt"
+      />
     </div>
   );
 }
@@ -276,6 +311,8 @@ interface CartLine { svcId: string; name: string; price: number; qty: number; un
 
 function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
   const toast = useToast();
+  const { byModule } = useProducts();
+  const laundryServices = byModule('laundry').filter(p => p.active);
 
   const [custSearch, setCustSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
@@ -292,6 +329,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
   const [gcashRef, setGcashRef] = useState('');
 
   const [showReceipt, setShowReceipt] = useState(false);
+  const [confirmPrint, setConfirmPrint] = useState(false);
   const [orderId] = useState(`LAU-${String(Math.floor(Math.random()*9000)+1000)}`);
 
   const filteredCusts = customers.filter(c =>
@@ -409,13 +447,43 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
         </div>
         
         <div className="flex gap-3 mt-6">
-          <Button variant="outline" className="flex-1 justify-center" onClick={() => toast.info('Printing receipt…')} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+          <Button variant="outline" className="flex-1 justify-center" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
           <Button variant="primary" className="flex-1 justify-center" onClick={() => {
             toast.success(`Order ${orderId} created!`);
             if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
             onNavigate('laundry');
           }}>Confirm & Finish</Button>
         </div>
+
+        <Confirm
+          open={confirmPrint}
+          onClose={() => setConfirmPrint(false)}
+          onConfirm={() => {
+            printReceipt({
+              businessName: 'ALMS Laundry Shop',
+              tagline: 'Professional Care',
+              txnId: orderId,
+              dateTime: new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+              cashier: userName,
+              customer: custName || 'Walk-in',
+              items: [
+                ...cart.map(c => ({ name: c.name, qty: c.qty, unit: c.unit, price: c.price, subtotal: c.subtotal })),
+                ...addons.map(a => ({ name: a.name, qty: 1, price: a.price, subtotal: a.price })),
+              ],
+              discount: discount > 0 ? discount : undefined,
+              total,
+              paymentMethod: paymentMethod || 'unpaid',
+              amountReceived: paymentMethod !== 'unpaid' ? received : undefined,
+              change: change > 0 ? change : undefined,
+              balance: balance > 0 ? balance : undefined,
+              gcashRef: gcashRef || undefined,
+            });
+            toast.success('Receipt downloaded.');
+          }}
+          title="Print Receipt?"
+          message={`Generate an 80mm receipt PDF for order ${orderId}.`}
+          confirmLabel="Print Receipt"
+        />
       </div>
     );
   }
@@ -706,8 +774,7 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
           </div>
         </CardHeader>
-        <div className="max-h-[500px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={500}>
             <Thead>
               <Tr>
               <Th>Order ID</Th>
@@ -735,8 +802,7 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
               </Tr>
             ))}
           </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
     </div>
   );

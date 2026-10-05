@@ -1,3 +1,34 @@
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  currentQty: number;
+  reorderLevel: number;
+  costPerUnit: number;
+  supplier: string;
+  supplierName: string;
+  status: 'normal' | 'low' | 'critical';
+}
+
+export interface StockMovement {
+  id: string;
+  date: string;
+  itemId: string;
+  item: string;
+  type: 'stock_in' | 'stock_out';
+  qty: number;
+  unit: string;
+  prevStock: number;
+  newStock: number;
+  supplierId: string;
+  supplierName: string;
+  poRef: string;
+  ref: string;
+  processedBy: string;
+  reason: string;
+}
+
 export const suppliers = [
   { id: 'SUP-001', name: 'Procter & Gamble Dist.', contactPerson: 'Aldo Ramos', phone: '028001234', email: 'sales@pgdist.ph', address: 'Tondo, Manila', status: 'active', category: 'Laundry' },
   { id: 'SUP-002', name: 'AquaPure Supplies Co.', contactPerson: 'Gina Cruz', phone: '028005678', email: 'orders@aquapure.ph', address: 'Caloocan, MM', status: 'active', category: 'Water' },
@@ -21,7 +52,7 @@ export const inventoryProducts = [
 ];
 
 // Stocks: product + current stock levels + reorder info
-export const inventoryItems = [
+export const inventoryItems: InventoryItem[] = [
   { id: 'INV-001', name: 'Ariel Detergent Powder (1kg)', category: 'Laundry', unit: 'kg', currentQty: 15, reorderLevel: 10, costPerUnit: 120, supplier: 'SUP-001', supplierName: 'Procter & Gamble Dist.', status: 'normal' },
   { id: 'INV-002', name: 'Downy Fabric Softener (900mL)', category: 'Laundry', unit: 'bottle', currentQty: 8, reorderLevel: 10, costPerUnit: 165, supplier: 'SUP-001', supplierName: 'Procter & Gamble Dist.', status: 'low' },
   { id: 'INV-003', name: 'Clorox Bleach (3.785L)', category: 'Laundry', unit: 'jug', currentQty: 4, reorderLevel: 5, costPerUnit: 280, supplier: 'SUP-003', supplierName: 'Clorox PH Distributor', status: 'low' },
@@ -64,12 +95,12 @@ export const purchaseOrders = [
   },
 ];
 
-export const stockMovements = [
+export const stockMovements: StockMovement[] = [
   { id: 'SM-0045', date: '2026-09-27 10:30', itemId: 'INV-001', item: 'Ariel Detergent Powder (1kg)', type: 'stock_in', qty: 10, unit: 'kg', prevStock: 5, newStock: 15, supplierId: 'SUP-001', supplierName: 'Procter & Gamble Dist.', poRef: 'PO-0021', ref: 'PO-0021', processedBy: 'Maria Santos', reason: 'Purchase delivery' },
   { id: 'SM-0044', date: '2026-09-27 10:30', itemId: 'INV-002', item: 'Downy Fabric Softener (900mL)', type: 'stock_in', qty: 12, unit: 'bottle', prevStock: 8, newStock: 20, supplierId: 'SUP-001', supplierName: 'Procter & Gamble Dist.', poRef: 'PO-0021', ref: 'PO-0021', processedBy: 'Maria Santos', reason: 'Purchase delivery' },
   { id: 'SM-0043', date: '2026-09-29 09:25', itemId: 'INV-002', item: 'Downy Fabric Softener (900mL)', type: 'stock_out', qty: 12, unit: 'bottle', prevStock: 20, newStock: 8, supplierId: '', supplierName: '', poRef: '', ref: 'LAU-0048', processedBy: 'Juan dela Cruz', reason: 'Laundry Usage' },
   { id: 'SM-0042', date: '2026-09-29 09:25', itemId: 'INV-001', item: 'Ariel Detergent Powder (1kg)', type: 'stock_out', qty: 2, unit: 'kg', prevStock: 17, newStock: 15, supplierId: '', supplierName: '', poRef: '', ref: 'LAU-0048', processedBy: 'Juan dela Cruz', reason: 'Laundry Usage' },
   { id: 'SM-0041', date: '2026-09-27 16:25', itemId: 'INV-005', item: '20L Purified Water Gallon (empty)', type: 'stock_out', qty: 12, unit: 'pcs', prevStock: 57, newStock: 45, supplierId: '', supplierName: '', poRef: '', ref: 'WAT-TXN-0116', processedBy: 'Ana Reyes', reason: 'Water Refilling Usage' },
-  { id: 'SM-0040', date: '2026-09-27 16:25', itemId: 'INV-007', item: 'Tamper-Proof Seal Wrap', type: 'stock_out', qty: 1, unit: 'rolls', prevStock: 4, newStock: 3, supplierId: '', supplierName: '', poRef: '', ref: 'WAT', processedBy: 'Ana Reyes', reason: 'Water Refilling Usage' },
+  { id: 'SM-0040', date: '2026-09-27 16:25', itemId: 'INV-007', item: 'Tamper-Proof Seal Wrap', type: 'stock_out', qty: 1, unit: 'rolls', prevStock: 4, newStock: 3, supplierId: '', supplierName: '', poRef: '', ref: 'WAT-TXN-0116', processedBy: 'Ana Reyes', reason: 'Water Refilling Usage' },
   { id: 'SM-0039', date: '2026-09-20 15:00', itemId: 'INV-005', item: '20L Purified Water Gallon (empty)', type: 'stock_in', qty: 20, unit: 'pcs', prevStock: 37, newStock: 57, supplierId: 'SUP-002', supplierName: 'AquaPure Supplies Co.', poRef: 'PO-0020', ref: 'PO-0020', processedBy: 'Maria Santos', reason: 'Purchase delivery' },
 ];

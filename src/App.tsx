@@ -1,9 +1,10 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ToastContainer } from './components/ui';
-import Layout from './components/Layout';
+import Layout, { type PageId } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DataProvider } from './context/DataContext';
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -25,19 +26,19 @@ function AppRoutes() {
     login(role, name);
   };
 
-  const mapPageToPath = (page: string) => {
-    const map: Record<string, string> = {
+  const mapPageToPath = (page: PageId): string => {
+    const map: Record<PageId, string> = {
       dashboard: '/dashboard',
       users: '/users', employees: '/users/employees', roles: '/users/roles', 'activity-logs': '/users/activity-logs',
-      laundry: '/laundry/orders', 'laundry-new': '/laundry/new', 'laundry-orders': '/laundry/orders', 'laundry-history': '/laundry/history',
-      water: '/water/new', 'water-new': '/water/new', 'water-history': '/water/history',
+      laundry: '/laundry/orders', 'laundry-new': '/laundry/new', 'laundry-orders': '/laundry/orders', 'laundry-history': '/laundry/history', 'laundry-services': '/laundry/services',
+      water: '/water/new', 'water-new': '/water/new', 'water-history': '/water/history', 'water-products': '/water/products',
       payments: '/payments/new', 'payments-new': '/payments/new', 'payments-history': '/payments/history',
       inventory: '/inventory/items', 'inventory-products': '/inventory/products', 'inventory-items': '/inventory/items', 'inventory-stock': '/inventory/stock', 'inventory-suppliers': '/inventory/suppliers', 'inventory-purchase': '/inventory/purchase',
       finance: '/finance/reports', 'finance-expenses': '/finance/expenses', 'finance-reports': '/finance/reports',
       analytics: '/analytics',
       settings: '/settings', profile: '/profile', 'change-password': '/change-password'
     };
-    return map[page] || '/dashboard';
+    return map[page] ?? '/dashboard';
   };
   
   // Create a wrapper component for routes that need auth data
@@ -45,7 +46,7 @@ function AppRoutes() {
     if (!auth) return <Navigate to="/login" replace />;
     if (adminOnly && auth.role !== 'admin') return <Navigate to="/dashboard" replace />; // or AccessDenied
     
-    return <Component subPage={subPage} userName={auth.name} userRole={auth.role} onNavigate={(p: string) => navigate(mapPageToPath(p))} {...props} />;
+    return <Component subPage={subPage} userName={auth.name} userRole={auth.role} onNavigate={(p: PageId) => navigate(mapPageToPath(p))} {...props} />;
   };
 
   return (
@@ -69,11 +70,13 @@ function AppRoutes() {
         <Route path="laundry/new" element={<AuthRoute component={LaundryPage} subPage="laundry-new" />} />
         <Route path="laundry/orders" element={<AuthRoute component={LaundryPage} subPage="laundry-orders" />} />
         <Route path="laundry/history" element={<AuthRoute component={LaundryPage} subPage="laundry-history" />} />
+        <Route path="laundry/services" element={<AuthRoute component={LaundryPage} adminOnly subPage="laundry-services" />} />
 
         {/* Water Refilling */}
         <Route path="water" element={<Navigate to="/water/new" replace />} />
         <Route path="water/new" element={<AuthRoute component={WaterRefillingPage} subPage="water-new" />} />
         <Route path="water/history" element={<AuthRoute component={WaterRefillingPage} subPage="water-history" />} />
+        <Route path="water/products" element={<AuthRoute component={WaterRefillingPage} adminOnly subPage="water-products" />} />
 
         {/* Payments */}
         <Route path="payments" element={<Navigate to="/payments/new" replace />} />
@@ -111,10 +114,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-        <ToastContainer />
-      </BrowserRouter>
+      <DataProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <ToastContainer />
+        </BrowserRouter>
+      </DataProvider>
     </AuthProvider>
   );
 }

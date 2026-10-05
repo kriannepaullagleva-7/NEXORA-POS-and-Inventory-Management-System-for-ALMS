@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Input, Select, Textarea,
+  Table, Thead, Tbody, Th, Td, Tr, Modal, ExportDialog, Confirm, Input, Select, Textarea,
   SearchBar, useToast, KpiCard, StatRow
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { inventoryItems, inventoryProducts, suppliers, purchaseOrders, stockMovements } from '../data/inventory';
-import { 
-  Package, Boxes, TrendingDown, ArrowDownRight, ArrowUpRight, 
+import { exportReportPdf } from '../utils/pdf';
+import { inventoryProducts, suppliers, purchaseOrders } from '../data/inventory';
+import { useInventory } from '../context/DataContext';
+import {
+  Package, Boxes, TrendingDown, ArrowDownRight, ArrowUpRight,
   ShoppingCart, FileText, Plus, Store, Download, FilePlus, Eye,
   Search, AlertCircle, Edit, Trash2, CheckCircle2, Banknote, Smartphone, MapPin
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
 
-interface Props { subPage: PageId; }
+interface Props { subPage: PageId; userName?: string; }
 
-export default function InventoryPage({ subPage }: Props) {
+export default function InventoryPage({ subPage, userName }: Props) {
   if (subPage === 'inventory-products') return <ProductsPage />;
   if (subPage === 'inventory-stock') return <StockMovementsPage />;
   if (subPage === 'inventory-suppliers') return <SuppliersPage />;
   if (subPage === 'inventory-purchase') return <PurchaseOrdersPage />;
-  return <InventoryItemsPage />;
+  return <InventoryItemsPage userName={userName || 'Staff'} />;
 }
 
 function ProductsPage() {
@@ -58,8 +60,7 @@ function ProductsPage() {
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} products</span>
           </div>
         </CardHeader>
-        <div className="max-h-[500px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={500}>
             <Thead>
               <Tr>
                 <Th>Product Code</Th>
@@ -84,8 +85,7 @@ function ProductsPage() {
                 </Tr>
               ))}
             </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Product" size="md"
@@ -103,8 +103,8 @@ function ProductsPage() {
   );
 }
 
-function InventoryItemsPage() {
-  const [items, setItems] = useState(inventoryItems);
+function InventoryItemsPage({ userName }: { userName: string }) {
+  const { items, stockIn, stockOut } = useInventory();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
@@ -145,12 +145,12 @@ function InventoryItemsPage() {
     if (!siQty || isNaN(parseFloat(siQty)) || parseFloat(siQty) <= 0) { toast.error('Enter a valid quantity.'); return; }
     if (!siUnitCost || isNaN(parseFloat(siUnitCost))) { toast.error('Enter unit cost.'); return; }
     const qty = parseFloat(siQty);
-    setItems(p => p.map(i => {
-      if (i.id !== showStockIn.id) return i;
-      const newQty = i.currentQty + qty;
-      const status = newQty <= 0 ? 'critical' : newQty <= i.reorderLevel ? 'low' : 'normal';
-      return { ...i, currentQty: newQty, status };
-    }));
+    const supplier = suppliers.find(s => s.id === siSupplier);
+    stockIn(showStockIn.id, {
+      supplierId: siSupplier, supplierName: supplier?.name || siSupplier,
+      poRef: siPORef, ref: siRef, qty, unitCost: parseFloat(siUnitCost),
+      processedBy: userName, reason: siNotes || undefined,
+    });
     toast.success(`Stock-in recorded: +${qty} ${showStockIn.unit} for ${showStockIn.name}.`);
     setShowStockIn(null); setSiSupplier(''); setSiPORef(''); setSiQty(''); setSiUnitCost(''); setSiRef(''); setSiNotes('');
   };
@@ -160,12 +160,7 @@ function InventoryItemsPage() {
     if (!soQty || isNaN(parseFloat(soQty)) || parseFloat(soQty) <= 0) { toast.error('Enter a valid quantity.'); return; }
     const qty = parseFloat(soQty);
     if (qty > showStockOut.currentQty) { toast.error('Cannot remove more than current stock.'); return; }
-    setItems(p => p.map(i => {
-      if (i.id !== showStockOut.id) return i;
-      const newQty = Math.max(0, i.currentQty - qty);
-      const status = newQty <= 0 ? 'critical' : newQty <= i.reorderLevel ? 'low' : 'normal';
-      return { ...i, currentQty: newQty, status };
-    }));
+    stockOut(showStockOut.id, { reason: soReason, qty, ref: soRef, processedBy: userName });
     toast.success(`Stock-out recorded: −${qty} ${showStockOut.unit} for ${showStockOut.name} (${soReason}).`);
     setShowStockOut(null); setSoReason(''); setSoQty(''); setSoRef(''); setSoNotes('');
   };
@@ -199,8 +194,7 @@ function InventoryItemsPage() {
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} items</span>
           </div>
         </CardHeader>
-        <div className="max-h-[400px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={400}>
             <Thead>
               <Tr>
               <Th>Item Details</Th>
@@ -245,8 +239,7 @@ function InventoryItemsPage() {
               </Tr>
             ))}
           </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
 
       {/* Add Item Modal */}
@@ -374,20 +367,38 @@ function InventoryItemsPage() {
 }
 
 function StockMovementsPage() {
+  const { movements } = useInventory();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  
-  const filtered = stockMovements.filter(m =>
+  const [showExport, setShowExport] = useState(false);
+  const toast = useToast();
+
+  const filtered = movements.filter(m =>
     (typeFilter === 'all' || m.type === typeFilter) &&
     (m.item.toLowerCase().includes(search.toLowerCase()) ||
     m.ref.toLowerCase().includes(search.toLowerCase()) ||
     m.processedBy.toLowerCase().includes(search.toLowerCase()))
   );
-  
+
+  const handleExport = () => {
+    exportReportPdf({
+      reportTitle: 'Stock Movement Audit Trail',
+      filtersLabel: typeFilter === 'all' ? 'All records' : typeFilter === 'stock_in' ? 'Stock In only' : 'Stock Out only',
+      columns: ['Log ID', 'Date & Time', 'Item', 'Type', 'Qty Change', 'Balance', 'Source / Reason', 'Reference', 'Processed By'],
+      rows: filtered.map(m => [
+        m.id, m.date, m.item, m.type === 'stock_in' ? 'IN' : 'OUT',
+        `${m.type === 'stock_in' ? '+' : '-'}${m.qty} ${m.unit}`, `${m.prevStock} -> ${m.newStock}`,
+        m.type === 'stock_in' ? m.supplierName : m.reason, m.poRef ? `PO: ${m.poRef} / ${m.ref}` : m.ref, m.processedBy,
+      ]),
+      fileName: 'Stock_Movement_Audit_Trail.pdf',
+    });
+    toast.success('Stock movement report exported.');
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Stock Movement Audit Trail" subtitle="Traceability log for all inventory changes"
-        actions={<Button variant="outline" icon={<Download className="w-4 h-4" />}>Export CSV</Button>} />
+        actions={<Button variant="outline" onClick={() => setShowExport(true)} icon={<Download className="w-4 h-4" />}>Export PDF</Button>} />
       
       <Card>
         <CardHeader>
@@ -403,7 +414,7 @@ function StockMovementsPage() {
             </div>
           </div>
         </CardHeader>
-        <Table>
+        <Table maxHeight={500}>
           <Thead>
             <Tr>
               <Th>Log ID</Th>
@@ -457,6 +468,16 @@ function StockMovementsPage() {
           </Tbody>
         </Table>
       </Card>
+
+      <ExportDialog
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        onConfirm={handleExport}
+        title="Export Report?"
+        reportTitle="Stock Movement Audit Trail"
+        filters={typeFilter === 'all' ? 'All records' : typeFilter === 'stock_in' ? 'Stock In only' : 'Stock Out only'}
+        rowCount={filtered.length}
+      />
     </div>
   );
 }
@@ -529,7 +550,21 @@ function SuppliersPage() {
 
 function PurchaseOrdersPage() {
   const [showCreate, setShowCreate] = useState(false);
+  const [viewPO, setViewPO] = useState<any>(null);
+  const [confirmPrintPO, setConfirmPrintPO] = useState(false);
   const toast = useToast();
+
+  const printPO = (po: any) => {
+    exportReportPdf({
+      reportTitle: `Purchase Order ${po.id}`,
+      period: `Issued ${fmt.date(po.date)} · Supplier: ${po.supplierName}`,
+      columns: ['Item', 'Qty', 'Unit', 'Unit Cost', 'Subtotal'],
+      rows: po.items.map((i: any) => [i.name, i.qty, i.unit, fmt.peso(i.unitCost), fmt.peso(i.subtotal)]),
+      totalsRow: ['', '', '', 'Total', fmt.peso(po.total)],
+      fileName: `${po.id}.pdf`,
+    });
+    toast.success(`Purchase order ${po.id} exported.`);
+  };
 
   return (
     <div className="space-y-6">
@@ -537,7 +572,7 @@ function PurchaseOrdersPage() {
         actions={<Button onClick={() => setShowCreate(true)} icon={<FilePlus className="w-4 h-4" />}>Create PO</Button>} />
         
       <Card>
-        <Table>
+        <Table maxHeight={500}>
           <Thead>
             <Tr>
               <Th>PO Number</Th>
@@ -573,13 +608,57 @@ function PurchaseOrdersPage() {
                 </Td>
                 <Td className="text-sm text-slate-500 font-medium">{po.receivedDate ? fmt.date(po.receivedDate) : '—'}</Td>
                 <Td align="center">
-                  <Button size="xs" variant="ghost" icon={<Eye className="w-4 h-4 text-slate-400"/>} title="View Purchase Order" />
+                  <Button size="xs" variant="ghost" onClick={() => setViewPO(po)} icon={<Eye className="w-4 h-4 text-slate-400"/>} title="View Purchase Order" />
                 </Td>
               </Tr>
             ))}
           </Tbody>
         </Table>
       </Card>
+
+      {viewPO && (
+        <Modal open={!!viewPO} onClose={() => setViewPO(null)} title={`Purchase Order ${viewPO.id}`} size="lg"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setViewPO(null)}>Close</Button>
+              <Button variant="outline" onClick={() => setConfirmPrintPO(true)} icon={<FileText className="w-4 h-4" />}>Export PDF</Button>
+            </>
+          }>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm">
+              <div><p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Supplier</p><p className="font-medium text-slate-900">{viewPO.supplierName}</p></div>
+              <div><p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Date Issued</p><p className="text-slate-800">{fmt.date(viewPO.date)}</p></div>
+              <div><p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Status</p><Badge variant={viewPO.status === 'received' ? 'blue' : 'gray'}>{viewPO.status === 'received' ? 'RECEIVED' : 'PENDING'}</Badge></div>
+              <div><p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Payment</p><Badge variant={viewPO.paymentStatus === 'paid' ? 'paid' : viewPO.paymentStatus === 'partial' ? 'partial' : 'unpaid'}>{viewPO.paymentStatus}</Badge></div>
+            </div>
+            <div className="border border-slate-100 rounded-xl overflow-hidden">
+              <div className="bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-400 uppercase flex justify-between">
+                <span>Item</span><span>Amount</span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {viewPO.items.map((i: any, idx: number) => (
+                  <div key={idx} className="px-4 py-2.5 text-sm flex justify-between">
+                    <span>{i.qty} {i.unit} × {i.name}</span>
+                    <span className="font-mono font-medium">{fmt.peso(i.subtotal)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-3 text-sm flex justify-between border-t border-slate-200 font-bold bg-slate-50">
+                <span>TOTAL</span><span className="font-mono">{fmt.peso(viewPO.total)}</span>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      <Confirm
+        open={confirmPrintPO}
+        onClose={() => setConfirmPrintPO(false)}
+        onConfirm={() => viewPO && printPO(viewPO)}
+        title="Export Purchase Order?"
+        message={`Generate a PDF for purchase order ${viewPO?.id ?? ''}.`}
+        confirmLabel="Export PDF"
+      />
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Purchase Order" size="lg"
         footer={<><Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Purchase order created successfully.'); setShowCreate(false); }}>Issue PO</Button></>}>

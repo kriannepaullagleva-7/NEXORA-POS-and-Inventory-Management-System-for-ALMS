@@ -211,9 +211,13 @@ export function Textarea({ label, error, className = '', ...props }: TextareaPro
 }
 
 // ─── Table ────────────────────────────────────────────────────────────────────
-export function Table({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+// `maxHeight` makes this single div the one true scroll container (both axes),
+// so the sticky <thead> below resolves against it correctly. Without it, the
+// table only needs horizontal scroll and relies on the page to scroll vertically.
+export function Table({ children, className = '', maxHeight }: { children: React.ReactNode; className?: string; maxHeight?: number | string }) {
+  const resolvedMax = typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight;
   return (
-    <div className="overflow-x-auto">
+    <div className={maxHeight ? 'overflow-auto relative' : 'overflow-x-auto'} style={resolvedMax ? { maxHeight: resolvedMax } : undefined}>
       <table className={`w-full text-sm text-left ${className}`}>{children}</table>
     </div>
   );
@@ -224,11 +228,12 @@ export function Thead({ children }: { children: React.ReactNode }) {
 export function Tbody({ children }: { children: React.ReactNode }) {
   return <tbody className="divide-y divide-slate-100">{children}</tbody>;
 }
+const alignClass: Record<'left' | 'center' | 'right', string> = { left: 'text-left', center: 'text-center', right: 'text-right' };
 export function Th({ children, className = '', align = 'left', colSpan }: { children: React.ReactNode; className?: string; align?: 'left'|'center'|'right'; colSpan?: number }) {
-  return <th colSpan={colSpan} className={`px-2 sm:px-4 py-2 sm:py-3 text-${align} text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 ${className}`}>{children}</th>;
+  return <th colSpan={colSpan} className={`px-2 sm:px-4 py-2 sm:py-3 ${alignClass[align]} text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 ${className}`}>{children}</th>;
 }
 export function Td({ children, className = '', align = 'left', colSpan, title }: { children: React.ReactNode; className?: string; align?: 'left'|'center'|'right'; colSpan?: number; title?: string }) {
-  return <td colSpan={colSpan} title={title} className={`px-2 sm:px-4 py-2 sm:py-3.5 text-[11px] sm:text-sm text-slate-700 text-${align} ${className}`}>{children}</td>;
+  return <td colSpan={colSpan} title={title} className={`px-2 sm:px-4 py-2 sm:py-3.5 text-[11px] sm:text-sm text-slate-700 ${alignClass[align]} ${className}`}>{children}</td>;
 }
 export function Tr({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
   return (
@@ -304,6 +309,38 @@ export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel
       }
     >
       <p className="text-sm text-slate-600">{message}</p>
+    </Modal>
+  );
+}
+
+// ─── Export / Print Confirmation Dialog ───────────────────────────────────────
+interface ExportDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  reportTitle: string;
+  period?: string;
+  filters?: string;
+  rowCount?: number;
+  confirmLabel?: string;
+}
+export function ExportDialog({ open, onClose, onConfirm, title, reportTitle, period, filters, rowCount, confirmLabel = 'Export PDF' }: ExportDialogProps) {
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="sm"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => { onConfirm(); onClose(); }}>{confirmLabel}</Button>
+        </>
+      }
+    >
+      <div className="space-y-2.5 text-sm">
+        <div className="flex justify-between"><span className="text-slate-500">Report</span><span className="font-medium text-slate-900 text-right">{reportTitle}</span></div>
+        {period && <div className="flex justify-between"><span className="text-slate-500">Period</span><span className="font-medium text-slate-900 text-right">{period}</span></div>}
+        {filters && <div className="flex justify-between"><span className="text-slate-500">Filters</span><span className="font-medium text-slate-900 text-right">{filters}</span></div>}
+        {rowCount !== undefined && <div className="flex justify-between"><span className="text-slate-500">Rows</span><span className="font-medium text-slate-900">{rowCount}</span></div>}
+      </div>
     </Modal>
   );
 }

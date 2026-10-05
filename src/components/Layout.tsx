@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useInventory } from '../context/DataContext';
+import { Confirm } from './ui';
 import { 
   LayoutDashboard, Users, Droplet, Waves, CreditCard, 
   Package, TrendingUp, BarChart3, Settings, LogOut, 
@@ -10,8 +12,8 @@ import {
 export type PageId =
   | 'dashboard'
   | 'users' | 'employees' | 'roles'
-  | 'laundry' | 'laundry-new' | 'laundry-orders' | 'laundry-history'
-  | 'water' | 'water-new' | 'water-history'
+  | 'laundry' | 'laundry-new' | 'laundry-orders' | 'laundry-history' | 'laundry-services'
+  | 'water' | 'water-new' | 'water-history' | 'water-products'
   | 'payments' | 'payments-new' | 'payments-history'
   | 'inventory' | 'inventory-products' | 'inventory-items' | 'inventory-stock' | 'inventory-suppliers' | 'inventory-purchase'
   | 'finance' | 'finance-expenses' | 'finance-reports'
@@ -24,7 +26,7 @@ interface NavItem {
   path: string;
   label: string;
   icon: React.ReactNode;
-  children?: { id: PageId; path: string; label: string }[];
+  children?: { id: PageId; path: string; label: string; adminOnly?: boolean }[];
   adminOnly?: boolean;
 }
 
@@ -36,6 +38,7 @@ const navItems: NavItem[] = [
       { id: 'laundry-new', path: '/laundry/new', label: 'New Order' },
       { id: 'laundry-orders', path: '/laundry/orders', label: 'Order Tracker' },
       { id: 'laundry-history', path: '/laundry/history', label: 'Sales History' },
+      { id: 'laundry-services', path: '/laundry/services', label: 'Manage Services', adminOnly: true },
     ],
   },
   {
@@ -43,6 +46,7 @@ const navItems: NavItem[] = [
     children: [
       { id: 'water-new', path: '/water/new', label: 'New Sale' },
       { id: 'water-history', path: '/water/history', label: 'Sales History' },
+      { id: 'water-products', path: '/water/products', label: 'Manage Products', adminOnly: true },
     ],
   },
   {
@@ -92,19 +96,21 @@ const pageTitle: Record<string, string> = {
   '/inventory/suppliers': 'Suppliers', '/inventory/purchase': 'Purchase Orders',
   '/finance': 'Finance', '/finance/expenses': 'Expense Management', '/finance/reports': 'Financial Reports',
   '/analytics': 'Business Analytics',
+  '/water/products': 'Manage Water Products', '/laundry/services': 'Manage Laundry Services',
   '/settings': 'Settings', '/profile': 'My Profile', '/change-password': 'Change Password',
   '/users/activity-logs': 'System Logs',
 };
 
 const initialNotifications = [
-  { id: 1, title: 'Laundry Ready', desc: 'Order #LAU-0042 is ready for pickup.', time: '10 mins ago', read: false },
-  { id: 2, title: 'Low Inventory', desc: 'Detergent stock is below minimum level.', time: '1 hour ago', read: false },
-  { id: 3, title: 'Payment Received', desc: '₱500 Cash payment recorded for Water.', time: '2 hours ago', read: true },
-  { id: 4, title: 'Stock Updated', desc: '20L Gallon inventory replenished (+50).', time: '1 day ago', read: true },
+  { id: 'n-1', title: 'Laundry Ready', desc: 'Order #LAU-0042 is ready for pickup.', time: '10 mins ago' },
+  { id: 'n-2', title: 'Payment Received', desc: '₱500 Cash payment recorded for Water.', time: '2 hours ago' },
+  { id: 'n-3', title: 'Stock Updated', desc: '20L Gallon inventory replenished (+50).', time: '1 day ago' },
 ];
+const initialReadIds = new Set(['n-2', 'n-3']);
 
 export default function Layout() {
   const { auth, logout } = useAuth();
+  const { lowStockItems } = useInventory();
   const location = useLocation();
   const navigate = useNavigate();
   const currentPath = location.pathname;
@@ -114,11 +120,21 @@ export default function Layout() {
     navItems.forEach(item => { if (currentPath.startsWith(item.path)) s.add(item.id); });
     return s;
   });
-  
+
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(() => new Set(initialReadIds));
+
+  const stockNotifications = useMemo(() => lowStockItems.map(item => ({
+    id: `stock-${item.id}`,
+    title: item.status === 'critical' ? 'Critical Stock' : 'Low Stock',
+    desc: `${item.name} — ${item.currentQty} ${item.unit} left (reorder at ${item.reorderLevel}).`,
+    time: 'Live',
+  })), [lowStockItems]);
+
+  const notifications = useMemo(() => [...stockNotifications, ...initialNotifications], [stockNotifications]);
 
   useEffect(() => {
     navItems.forEach(item => {
@@ -157,12 +173,14 @@ export default function Layout() {
   };
 
   const isActive = (item: NavItem) => currentPath === item.path || (item.children && currentPath.startsWith(item.path));
-  const filteredNav = navItems.filter(item => !item.adminOnly || userRole === 'admin');
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const filteredNav = navItems
+    .filter(item => !item.adminOnly || userRole === 'admin')
+    .map(item => ({ ...item, children: item.children?.filter(c => !c.adminOnly || userRole === 'admin') }));
+  const unreadCount = notifications.filter(n => !readIds.has(n.id)).length;
 
   const markAllRead = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setNotifications(notifications.map(n => ({...n, read: true})));
+    setReadIds(new Set(notifications.map(n => n.id)));
   };
 
   return (
@@ -184,8 +202,8 @@ export default function Layout() {
               <Droplet className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="text-white font-bold text-sm tracking-wide">ALMS POS</div>
-              <div className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest leading-tight mt-0.5">and Inventory Management System</div>
+              <div className="text-white font-bold text-sm tracking-wide">ALMS</div>
+              <div className="text-blue-400 text-[9px] font-semibold uppercase tracking-wide leading-tight mt-0.5">Point of Sale and Inventory Management System</div>
             </div>
           </div>
           <button className="lg:hidden text-slate-400 hover:text-white" onClick={() => setSidebarOpen(false)}>
@@ -259,7 +277,7 @@ export default function Layout() {
               <Menu className="w-5 h-5" />
             </button>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">{pageTitle[currentPath] ?? 'ALMS POS and Inventory Management System'}</h2>
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">{pageTitle[currentPath] ?? 'Point of Sale and Inventory Management System'}</h2>
               <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 hidden sm:block">
                 {new Date().toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
               </p>
@@ -275,7 +293,11 @@ export default function Layout() {
             <div className="relative" onClick={e => e.stopPropagation()}>
               <button onClick={() => { setNotifOpen(p => !p); setProfileOpen(false); }} className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
                 <Bell className="w-5 h-5" />
-                {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
               
               {notifOpen && (
@@ -285,15 +307,20 @@ export default function Layout() {
                     <button onClick={markAllRead} className="text-xs font-medium text-blue-600 hover:text-blue-800">Mark all read</button>
                   </div>
                   <div className="overflow-y-auto flex-1">
-                    {notifications.map(n => (
-                      <div key={n.id} className={`p-4 border-b border-slate-50 cursor-pointer transition-colors hover:bg-slate-50 ${!n.read ? 'bg-blue-50/30' : ''}`} onClick={() => setNotifications(notifications.map(item => item.id === n.id ? {...item, read: true} : item))}>
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-slate-400">No notifications.</div>
+                    ) : notifications.map(n => {
+                      const unread = !readIds.has(n.id);
+                      return (
+                      <div key={n.id} className={`p-4 border-b border-slate-50 cursor-pointer transition-colors hover:bg-slate-50 ${unread ? 'bg-blue-50/30' : ''}`} onClick={() => setReadIds(prev => new Set(prev).add(n.id))}>
                         <div className="flex justify-between items-start mb-1">
-                          <p className={`text-sm font-semibold ${!n.read ? 'text-slate-900' : 'text-slate-700'}`}>{n.title}</p>
+                          <p className={`text-sm font-semibold ${unread ? 'text-slate-900' : 'text-slate-700'}`}>{n.title}</p>
                           <p className="text-[10px] text-slate-400 whitespace-nowrap ml-2 mt-0.5">{n.time}</p>
                         </div>
-                        <p className={`text-xs ${!n.read ? 'text-slate-700' : 'text-slate-500'}`}>{n.desc}</p>
+                        <p className={`text-xs ${unread ? 'text-slate-700' : 'text-slate-500'}`}>{n.desc}</p>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -326,7 +353,7 @@ export default function Layout() {
                     </button>
                   </div>
                   <div className="border-t border-slate-100 py-1">
-                    <button onClick={() => { logout(); navigate('/login'); }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 font-medium hover:bg-red-50">
+                    <button onClick={() => { setProfileOpen(false); setConfirmLogout(true); }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 font-medium hover:bg-red-50">
                       <LogOut className="w-4 h-4 text-red-500" /> Sign Out
                     </button>
                   </div>
@@ -342,6 +369,16 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
+      <Confirm
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={() => { logout(); navigate('/login'); }}
+        title="Sign Out?"
+        message="You will be signed out of the system and returned to the login screen."
+        confirmLabel="Sign Out"
+        danger
+      />
     </div>
   );
 }

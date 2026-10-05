@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  PageHeader, Card, CardHeader, CardBody, Badge, Button,
+  PageHeader, Card, CardHeader, CardBody, Badge, Button, Confirm,
   Input, Select, Textarea, useToast, StatRow,
 } from '../components/ui';
-import { 
-  User, Lock, Settings, Store, Bell, Receipt, 
-  Save, X, Edit, KeyRound
+import {
+  User, Lock, Settings, Store, Bell, Receipt,
+  Save, X, Edit, KeyRound, LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { PageId } from '../components/Layout';
@@ -14,8 +15,51 @@ interface Props { subPage: PageId; userName: string; userRole: 'admin' | 'staff'
 
 export default function ProfilePage({ subPage, userName, userRole, onNavigate }: Props) {
   if (subPage === 'change-password') return <ChangePasswordPage onNavigate={onNavigate} />;
-  if (subPage === 'settings') return <SettingsPage userRole={userRole} />;
+  if (subPage === 'settings') return <SettingsPage userName={userName} userRole={userRole} onNavigate={onNavigate} />;
   return <MyProfilePage userName={userName} userRole={userRole} />;
+}
+
+function AccountSection({ userName, userRole, onNavigate }: { userName: string; userRole: 'admin' | 'staff'; onNavigate: (p: PageId) => void }) {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  return (
+    <Card>
+      <CardHeader className="flex items-center gap-2">
+        <User className="w-4 h-4 text-blue-600" />
+        <h3 className="font-semibold text-slate-900 tracking-tight">Account</h3>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex flex-shrink-0 items-center justify-center text-white text-xl font-bold shadow-inner">
+            {userName.charAt(0)}
+          </div>
+          <div>
+            <p className="font-bold text-slate-900">{userName}</p>
+            <Badge variant={userRole === 'admin' ? 'admin' : 'staff'}>
+              {userRole === 'admin' ? 'System Administrator' : 'Staff Member'}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+          <Button variant="outline" size="sm" onClick={() => onNavigate('profile')} icon={<User className="w-4 h-4" />}>My Profile</Button>
+          <Button variant="outline" size="sm" onClick={() => onNavigate('change-password')} icon={<KeyRound className="w-4 h-4" />}>Change Password</Button>
+          <Button variant="danger" size="sm" onClick={() => setConfirmLogout(true)} icon={<LogOut className="w-4 h-4" />}>Sign Out</Button>
+        </div>
+      </CardBody>
+
+      <Confirm
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={() => { logout(); navigate('/login'); }}
+        title="Sign Out?"
+        message="You will be signed out of the system and returned to the login screen."
+        confirmLabel="Sign Out"
+        danger
+      />
+    </Card>
+  );
 }
 
 function MyProfilePage({ userName, userRole }: { userName: string; userRole: 'admin' | 'staff' }) {
@@ -136,13 +180,14 @@ function ChangePasswordPage({ onNavigate }: { onNavigate: (p: PageId) => void })
   );
 }
 
-function SettingsPage({ userRole }: { userRole: 'admin' | 'staff' }) {
+function SettingsPage({ userName, userRole, onNavigate }: { userName: string; userRole: 'admin' | 'staff'; onNavigate: (p: PageId) => void }) {
   const toast = useToast();
 
   if (userRole === 'staff') {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <PageHeader title="Personal Settings" subtitle="Configure your local preferences" />
+        <AccountSection userName={userName} userRole={userRole} onNavigate={onNavigate} />
         <Card>
           <CardBody className="p-8 text-center">
             <Settings className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -159,6 +204,8 @@ function SettingsPage({ userRole }: { userRole: 'admin' | 'staff' }) {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <PageHeader title="System Settings" subtitle="Configure global system preferences and business rules" />
+
+      <AccountSection userName={userName} userRole={userRole} onNavigate={onNavigate} />
 
       <Card>
         <CardHeader className="flex items-center gap-2">

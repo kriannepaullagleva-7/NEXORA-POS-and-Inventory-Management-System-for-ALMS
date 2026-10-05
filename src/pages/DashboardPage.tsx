@@ -5,27 +5,15 @@ import { fmt } from '../utils/formatters';
 import { laundryOrders } from '../data/laundry';
 import { waterSales } from '../data/water';
 import { payments } from '../data/payments';
-import { inventoryItems } from '../data/inventory';
-import { dailyRevenue, expenses } from '../data/finance';
-import { 
-  Banknote, CreditCard, Receipt, Waves, Droplet, 
-  PackageSearch, TrendingUp, TrendingDown, 
-  PlusCircle, Search, Box, PackagePlus, PackageMinus, 
+import { dailyRevenue } from '../data/finance';
+import {
+  Banknote, CreditCard, Receipt, Waves, Droplet,
+  Search, PackagePlus, PackageMinus,
   FileText, ShoppingCart, BellRing
 } from 'lucide-react';
 import type { PageId } from '../components/Layout';
 
 interface Props { onNavigate: (p: PageId) => void; userRole: 'admin' | 'staff'; }
-
-const statusBadge = (s: string) => {
-  const map: Record<string, any> = {
-    pending: 'pending', in_progress: 'inprogress', ready: 'ready', released: 'released', cancelled: 'cancelled',
-  };
-  const labels: Record<string, string> = {
-    pending: 'Pending', in_progress: 'In Progress', ready: 'Ready', released: 'Released', cancelled: 'Cancelled',
-  };
-  return <Badge variant={map[s] ?? 'gray'}>{labels[s] ?? s}</Badge>;
-};
 
 export default function DashboardPage({ onNavigate, userRole }: Props) {
   const today = '2026-09-29';
@@ -36,14 +24,9 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
   const todayCash  = todayPayments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
   const todayGCash = todayPayments.filter(p => p.method === 'gcash').reduce((s, p) => s + p.amount, 0);
   const todayTotal = todayCash + todayGCash;
-  const todayExp   = expenses.filter(e => e.date === today).reduce((s, e) => s + e.amount, 0);
-  const todayNet   = todayTotal - todayExp;
-
-  const pendingCount = laundryOrders.filter(o => o.status === 'pending').length;
   const readyCount   = laundryOrders.filter(o => o.status === 'ready').length;
-  const lowStock     = inventoryItems.filter(i => i.status !== 'normal');
 
-  const recentTxns = [
+  const recentTransactions = [
     ...todayLaundry.map(o => ({
       id: o.id, type: 'Laundry', customer: o.customerName,
       amount: o.total, method: o.paymentMethod || 'unpaid',
@@ -96,47 +79,12 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
           onClick={() => onNavigate('payments-history')}
         />
         <KpiCard 
-          title="Today's Txns" 
+          title="Today's Transactions" 
           value={`${todayLaundry.length + todayWater.length}`} 
           subtext={`${todayLaundry.length} laundry · ${todayWater.length} water`} 
           icon={<Receipt className="w-5 h-5" />} 
         />
       </div>
-
-      {userRole === 'admin' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-          <KpiCard 
-            title="Today's Expenses" 
-            value={fmt.peso(todayExp)} 
-            subtext="Recorded today" 
-            icon={<TrendingDown className="w-5 h-5" />} 
-            onClick={() => onNavigate('finance-expenses')}
-          />
-          <KpiCard 
-            title="Net Revenue" 
-            value={fmt.peso(todayNet)} 
-            subtext="Sales − expenses" 
-            icon={<TrendingUp className="w-5 h-5" />} 
-            trend={todayNet >= 0 ? { value: 'Positive', up: true } : { value: 'Deficit', up: false }}
-            onClick={() => onNavigate('finance-reports')}
-          />
-          <KpiCard 
-            title="Active Orders" 
-            value={laundryOrders.filter(o=>!['released','cancelled'].includes(o.status)).length} 
-            subtext={`${readyCount} ready for pickup`} 
-            icon={<Waves className="w-5 h-5" />} 
-            onClick={() => onNavigate('laundry-orders')}
-          />
-          <KpiCard 
-            title="Low Stock Items" 
-            value={lowStock.length} 
-            subtext="Needs replenishment" 
-            icon={<PackageSearch className="w-5 h-5" />} 
-            trend={lowStock.length > 0 ? { value: 'Action required', up: false } : undefined}
-            onClick={() => onNavigate('inventory-items')}
-          />
-        </div>
-      )}
 
       {/* Quick Actions */}
       <div className="flex items-center gap-2 py-1 overflow-x-auto flex-nowrap pb-2 -mx-6 px-6 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">
@@ -187,50 +135,35 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
           </div>
 
         {/* Action Center */}
-        <div className={`${userRole === 'admin' ? 'lg:col-span-2' : 'lg:col-span-2'} flex flex-col gap-4`}>
-          {readyCount > 0 && (
-            <div className="bg-gradient-to-br from-amber-50 to-amber-50/50 border border-amber-200 rounded-xl p-4 transition-smooth hover:shadow-md hover:border-amber-300">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <BellRing className="w-4 h-4 text-amber-700 animate-pulse-soft" />
-                  <span className="text-sm font-semibold text-amber-900">Ready for Pickup · {readyCount} orders</span>
-                </div>
-                <button onClick={() => onNavigate('laundry-orders')} className="text-xs text-amber-700 hover:text-amber-900 hover:translate-x-0.5 transition-all font-semibold">View tracker →</button>
-              </div>
-              <div className="space-y-1.5">
-                {laundryOrders.filter(o => o.status === 'ready').slice(0, 3).map(o => (
-                  <div key={o.id} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-amber-100 transition-smooth hover:border-amber-200 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{o.customerName}</p>
-                      <p className="text-xs text-slate-500 font-mono">{o.id}</p>
-                    </div>
-                    <Badge variant="ready">Ready</Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <Card className="flex-1">
+        <div className="lg:col-span-2 flex flex-col gap-4">
+          <Card className="flex-1 flex flex-col">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-slate-900 tracking-tight">Low Stock Alerts</h3>
-                <button onClick={() => onNavigate('inventory-items')} className="text-xs text-blue-600 font-medium hover:underline">Manage</button>
+                <h3 className="font-semibold text-slate-900 tracking-tight flex items-center gap-2">
+                  <BellRing className="w-4 h-4 text-amber-600" />
+                  Ready for Pickup{readyCount > 0 ? ` · ${readyCount} orders` : ''}
+                </h3>
+                <button onClick={() => onNavigate('laundry-orders')} className="text-xs text-blue-600 font-medium hover:underline">View tracker</button>
               </div>
             </CardHeader>
-            <div className="divide-y divide-slate-100 px-6">
-              {lowStock.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 text-sm">Inventory levels are healthy.</div>
-              ) : lowStock.slice(0, 4).map(item => (
-                <div key={item.id} className="py-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{item.name}</p>
-                    <p className="text-xs text-slate-500">{item.currentQty} {item.unit} left · reorder at {item.reorderLevel}</p>
-                  </div>
-                  <Badge variant={item.status === 'critical' ? 'red' : 'yellow'}>{item.status}</Badge>
+            <CardBody className="flex-1">
+              {readyCount === 0 ? (
+                <div className="flex-1 flex items-center justify-center py-8 text-center text-slate-500 text-sm">No orders waiting for pickup.</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {laundryOrders.filter(o => o.status === 'ready').slice(0, 6).map(o => (
+                    <div key={o.id} onClick={() => onNavigate('laundry-orders')}
+                      className="flex items-center justify-between py-2.5 px-3 bg-amber-50/50 rounded-lg border border-amber-100 transition-smooth hover:border-amber-200 hover:shadow-sm cursor-pointer">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{o.customerName}</p>
+                        <p className="text-xs text-slate-500 font-mono">{o.id}</p>
+                      </div>
+                      <Badge variant="ready">Ready</Badge>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </CardBody>
           </Card>
         </div>
       </div>
@@ -249,7 +182,7 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
             </div>
           </div>
         </CardHeader>
-        <Table>
+        <Table maxHeight={400}>
           <Thead>
             <Tr>
               <Th>Transaction ID</Th>
@@ -263,9 +196,9 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
             </Tr>
           </Thead>
           <Tbody>
-            {recentTxns.length === 0 ? (
+            {recentTransactions.length === 0 ? (
               <Tr><Td colSpan={8} align="center"><span className="text-slate-500">No transactions recorded today.</span></Td></Tr>
-            ) : recentTxns.map(t => (
+            ) : recentTransactions.map(t => (
               <Tr key={t.id}>
                 <Td className="font-mono font-medium text-blue-600">{t.id}</Td>
                 <Td><Badge variant={t.type === 'Laundry' ? 'blue' : 'gray'}>{t.type}</Badge></Td>

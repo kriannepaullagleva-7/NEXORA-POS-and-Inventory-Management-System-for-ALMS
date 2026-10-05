@@ -72,8 +72,7 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} employees</span>
           </div>
         </CardHeader>
-        <div className="max-h-[400px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={400}>
             <Thead>
               <Tr>
                 <Th>Employee Profile</Th>
@@ -116,8 +115,7 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
                 </Tr>
               ))}
             </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
 
       {/* Add Modal */}
@@ -292,7 +290,7 @@ function ActivityLogsPage() {
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} log entries</span>
           </div>
         </CardHeader>
-        <Table>
+        <Table maxHeight={500}>
           <Thead>
             <Tr>
               <Th>Timestamp</Th>

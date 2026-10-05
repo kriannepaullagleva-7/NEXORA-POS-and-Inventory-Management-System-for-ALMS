@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Modal, Input, Select, Textarea, SearchBar, useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr
+  Modal, Confirm, Input, Select, Textarea, SearchBar, useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
+import { printReceipt } from '../utils/pdf';
 import { payments } from '../data/payments';
 import { laundryOrders } from '../data/laundry';
 import { waterSales } from '../data/water';
@@ -22,11 +23,32 @@ export default function PaymentPage({ subPage, onNavigate, userName }: Props) {
 
 // ─── Payment Ledger ───────────────────────────────────────────────────────────
 function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewPayment, setViewPayment] = useState<any>(null);
+  const [confirmPrint, setConfirmPrint] = useState(false);
+
+  const printPaymentReceipt = (pay: any) => {
+    printReceipt({
+      businessName: 'ALMS',
+      tagline: pay.type === 'water' ? 'Water Refilling Station' : pay.type === 'laundry' ? 'Laundry Shop' : 'Debt Ledger',
+      txnId: pay.id,
+      dateTime: fmt.datetime(pay.date),
+      cashier: pay.processedBy,
+      customer: pay.customerName,
+      items: [{ name: pay.description || pay.linkedTo || 'Payment', qty: 1, price: pay.amount, subtotal: pay.amount }],
+      total: pay.amount,
+      paymentMethod: pay.method,
+      amountReceived: pay.amtReceived,
+      change: pay.change > 0 ? pay.change : undefined,
+      balance: pay.balance > 0 ? pay.balance : undefined,
+      gcashRef: pay.gcashRef || undefined,
+    });
+    toast.success(`Receipt for ${pay.id} downloaded.`);
+  };
 
   const totalCash = payments.filter(p => p.method === 'cash').reduce((a, p) => a + p.amount, 0);
   const totalGcash = payments.filter(p => p.method === 'gcash').reduce((a, p) => a + p.amount, 0);
@@ -92,8 +114,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
           </div>
         </CardHeader>
-        <div className="max-h-[320px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={320}>
             <Thead>
               <Tr>
                 <Th>Transaction ID</Th>
@@ -144,8 +165,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
                 </Tr>
               ))}
             </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
 
       {/* Payment Detail Modal */}
@@ -154,7 +174,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           footer={
             <>
               <Button variant="ghost" onClick={() => setViewPayment(null)}>Close</Button>
-              <Button variant="outline" icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+              <Button variant="outline" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
             </>
           }>
           <div className="space-y-5">
@@ -214,6 +234,15 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           </div>
         </Modal>
       )}
+
+      <Confirm
+        open={confirmPrint}
+        onClose={() => setConfirmPrint(false)}
+        onConfirm={() => viewPayment && printPaymentReceipt(viewPayment)}
+        title="Print Receipt?"
+        message={`Generate an 80mm receipt PDF for transaction ${viewPayment?.id ?? ''}.`}
+        confirmLabel="Print Receipt"
+      />
     </div>
   );
 }

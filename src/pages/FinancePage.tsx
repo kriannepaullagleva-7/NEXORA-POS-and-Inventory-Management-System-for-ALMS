@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Input, Select, Textarea,
+  Table, Thead, Tbody, Th, Td, Tr, Modal, ExportDialog, Input, Select, Textarea,
   SearchBar, useToast, KpiCard, StatRow,
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
+import { exportReportPdf } from '../utils/pdf';
 import { monthlyRevenue, expenses } from '../data/finance';
 import { payments } from '../data/payments';
 import { 
@@ -226,7 +227,7 @@ function ExpensesPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title="Total Expenses (Sep)" value={fmt.peso(expenses.reduce((s: number, e: any)=>s+e.amount,0))} mono icon={<TrendingDown className="w-5 h-5 text-red-500" />} />
         {['Inventory Purchase','Utilities','Rent'].map(cat => (
-          <KpiCard key={cat} title={cat} value={fmt.peso(expenses.filter(e=>(e: any)=>e.category===cat).reduce((s: number, e: any)=>s+e.amount,0))} mono icon={<Receipt className="w-5 h-5 text-slate-400" />} />
+          <KpiCard key={cat} title={cat} value={fmt.peso(expenses.filter((e: any) => e.category === cat).reduce((s: number, e: any)=>s+e.amount,0))} mono icon={<Receipt className="w-5 h-5 text-slate-400" />} />
         ))}
       </div>
       
@@ -240,8 +241,7 @@ function ExpensesPage() {
             </div>
           </div>
         </CardHeader>
-        <div className="max-h-[400px] overflow-y-auto relative">
-          <Table>
+        <Table maxHeight={400}>
             <Thead>
               <Tr>
                 <Th>Expense ID</Th>
@@ -271,10 +271,9 @@ function ExpensesPage() {
                 </Tr>
               ))}
             </Tbody>
-          </Table>
-        </div>
+        </Table>
       </Card>
-      
+
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Record New Expense" size="md"
         footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Expense recorded successfully.'); setShowAdd(false); }}>Save Expense</Button></>}>
         <div className="space-y-4">
@@ -294,16 +293,36 @@ function ExpensesPage() {
 
 function FinancialReportsPage() {
   const [period, setPeriod] = useState('monthly');
+  const [exportMode, setExportMode] = useState<'export' | 'print' | null>(null);
+  const toast = useToast();
   const totalRev = monthlyRevenue.reduce((s: number, m: any)=>s+m.laundry+m.water,0);
   const totalExp = expenses.reduce((s: number, e: any)=>s+e.amount,0);
+  const periodLabel: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+
+  const handleExportConfirm = () => {
+    exportReportPdf({
+      reportTitle: 'Financial Reports — Monthly P&L Statement',
+      period: `${periodLabel[period]} · Year-to-Date`,
+      columns: ['Period', 'Laundry Rev.', 'Water Rev.', 'Total Revenue', 'Est. Expenses', 'Net Income', 'Profit Margin'],
+      rows: monthlyRevenue.map((m: any) => {
+        const rev = m.laundry + m.water;
+        const exp = Math.round(rev * 0.55);
+        const net = rev - exp;
+        const margin = rev > 0 ? `${((net / rev) * 100).toFixed(1)}%` : '0.0%';
+        return [`${m.month} 2026`, fmt.peso(m.laundry), fmt.peso(m.water), fmt.peso(rev), fmt.peso(exp), fmt.peso(net), margin];
+      }),
+      fileName: 'ALMS_Financial_Report.pdf',
+    });
+    toast.success(exportMode === 'print' ? 'Report ready to print.' : 'Financial report exported.');
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader title="Financial Reports" subtitle="Comprehensive financial summaries, statements, and analysis"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" icon={<Download className="w-4 h-4" />}>Export PDF</Button>
-            <Button variant="outline" icon={<Printer className="w-4 h-4" />}>Print</Button>
+            <Button variant="outline" onClick={() => setExportMode('export')} icon={<Download className="w-4 h-4" />}>Export PDF</Button>
+            <Button variant="outline" onClick={() => setExportMode('print')} icon={<Printer className="w-4 h-4" />}>Print</Button>
           </div>
         } />
         
@@ -319,8 +338,8 @@ function FinancialReportsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 flex flex-col">
           <CardHeader><h3 className="font-semibold text-slate-900 tracking-tight">Revenue vs Expenses — Monthly</h3></CardHeader>
-          <CardBody className="flex-1 pt-2">
-            <ResponsiveContainer width="100%" height={280}>
+          <CardBody className="flex-1 pt-2 min-h-[320px]">
+            <ResponsiveContainer width="100%" height="100%" minHeight={280}>
               <BarChart data={monthlyRevenue.map(m => ({ ...m, total: m.laundry + m.water, expense: Math.round((m.laundry + m.water) * 0.55) }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} dy={10} />
@@ -372,7 +391,7 @@ function FinancialReportsPage() {
 
       <Card>
         <CardHeader><h3 className="font-semibold text-slate-900 tracking-tight">Monthly P&L Statement (Year-to-Date)</h3></CardHeader>
-        <Table>
+        <Table maxHeight={400}>
           <Thead>
             <Tr>
               <Th>Period</Th>
@@ -409,6 +428,17 @@ function FinancialReportsPage() {
           </Tbody>
         </Table>
       </Card>
+
+      <ExportDialog
+        open={exportMode !== null}
+        onClose={() => setExportMode(null)}
+        onConfirm={handleExportConfirm}
+        title={exportMode === 'print' ? 'Print Report?' : 'Export Report?'}
+        reportTitle="Monthly P&L Statement"
+        period={`${periodLabel[period]} · Year-to-Date`}
+        rowCount={monthlyRevenue.length}
+        confirmLabel={exportMode === 'print' ? 'Print' : 'Export PDF'}
+      />
     </div>
   );
 }
