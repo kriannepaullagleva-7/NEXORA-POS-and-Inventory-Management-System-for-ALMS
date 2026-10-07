@@ -1,16 +1,46 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Input, Select,
-  SearchBar, Tabs, useToast, KpiCard, Confirm, StatRow,
+  PageHeader,
+  Card,
+  CardHeader,
+  CardBody,
+  Badge,
+  Button,
+  Table,
+  Thead,
+  Tbody,
+  Th,
+  Td,
+  Tr,
+  Modal,
+  Input,
+  Select,
+  SearchBar,
+  useToast,
+  KpiCard,
+  RowActions,
+  ViewAction,
+  EditAction,
+  DeleteAction,
+  Confirm,
+  StatRow
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { employees } from '../data/employees';
-import { activityLogs } from '../data/activityLogs';
-import { 
-  Users, UserCheck, Shield, KeySquare, 
-  Plus, Search, Eye, AlertCircle, ShieldAlert,
-  CheckCircle2, XCircle, Activity, UserPlus
+import { matchesQuery } from '../utils/search';
+import { useAsync } from '../hooks/useAsync';
+import { employeeService } from '../services/employeeService';
+import { activityService } from '../services/activityService';
+import { Avatar } from '../components/Avatar';
+import type { ActivityLog, Employee } from '../types/models';
+import {
+  Users,
+  UserCheck,
+  Shield,
+  KeySquare,
+  ShieldAlert,
+  CheckCircle2,
+  XCircle,
+  UserPlus
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -26,24 +56,79 @@ export default function UserManagementPage({ subPage, onNavigate }: Props) {
 function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
-  const [showView, setShowView] = useState<any>(null);
-  const [confirmDeact, setConfirmDeact] = useState<any>(null);
+  const [showView, setShowView] = useState<Employee | null>(null);
+  const [confirmDeact, setConfirmDeact] = useState<Employee | null>(null);
+  const [editEmp, setEditEmp] = useState<Employee | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', role: 'staff', phone: '' });
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
-  const [empList, setEmpList] = useState(employees);
   const [form, setForm] = useState({ name: '', role: 'staff', email: '', phone: '' });
 
+  const { data: rows, loading, error, reload } = useAsync(() => employeeService.list(), []);
+  const empList: Employee[] = rows.map(r => ({
+    id: r.id, name: r.name, role: r.role, email: r.email, phone: r.phone ?? '',
+    status: r.status, joined: r.joined ?? '', lastLogin: r.last_login ?? '',
+    avatarUrl: r.avatar_url, authUserId: r.auth_user_id,
+  }));
+
   const filtered = empList.filter(e =>
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    e.email.toLowerCase().includes(search.toLowerCase())
+    matchesQuery(search, e.id, e.name, e.email, e.phone, e.role, e.status, e.joined, e.lastLogin)
   );
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.name || !form.email) { toast.error('Name and email are required.'); return; }
-    const newEmp = { id: `EMP-00${empList.length + 1}`, ...form, status: 'active', joined: '2026-09-29', lastLogin: 'Never' };
-    setEmpList(p => [...p, newEmp as any]);
-    toast.success('Employee account created successfully.');
-    setShowAdd(false);
-    setForm({ name: '', role: 'staff', email: '', phone: '' });
+    setSaving(true);
+    try {
+      await employeeService.create({
+        name: form.name.trim(),
+        role: form.role as 'admin' | 'staff',
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+      });
+      toast.success('Employee record created. Create their login in Supabase Auth with the same email.');
+      setShowAdd(false);
+      setForm({ name: '', role: 'staff', email: '', phone: '' });
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create the employee.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEdit = (emp: Employee) => {
+    setEditForm({ name: emp.name, role: emp.role, phone: emp.phone });
+    setEditEmp(emp);
+  };
+
+  const saveEdit = async () => {
+    if (!editEmp) return;
+    if (!editForm.name.trim()) { toast.error('Full name is required.'); return; }
+    setSaving(true);
+    try {
+      await employeeService.update(editEmp.id, {
+        name: editForm.name.trim(),
+        role: editForm.role as 'admin' | 'staff',
+        phone: editForm.phone.trim() || null,
+      });
+      toast.success('Employee updated.');
+      setEditEmp(null);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the employee.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async (emp: Employee) => {
+    try {
+      await employeeService.setStatus(emp.id, emp.status === 'active' ? 'inactive' : 'active');
+      toast.success(`Account ${emp.status === 'active' ? 'deactivated' : 'activated'} successfully.`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the account.');
+    }
   };
 
   return (
@@ -59,58 +144,59 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Employees" value={empList.length} mono icon={<Users className="w-5 h-5 text-blue-500" />} />
-        <KpiCard title="Active Accounts" value={empList.filter(e=>e.status==='active').length} mono icon={<UserCheck className="w-5 h-5 text-green-500" />} />
-        <KpiCard title="Administrators" value={empList.filter(e=>e.role==='admin').length} mono icon={<Shield className="w-5 h-5 text-purple-500" />} />
-        <KpiCard title="Staff / Staffs" value={empList.filter(e=>e.role==='staff').length} mono icon={<KeySquare className="w-5 h-5 text-amber-500" />} />
+        <KpiCard title="Total Employees" value={empList.length} icon={<Users className="w-5 h-5 text-blue-500" />} />
+        <KpiCard title="Active Accounts" value={empList.filter(e=>e.status==='active').length} icon={<UserCheck className="w-5 h-5 text-green-500" />} />
+        <KpiCard title="Administrators" value={empList.filter(e=>e.role==='admin').length} icon={<Shield className="w-5 h-5 text-purple-500" />} />
+        <KpiCard title="Staff Accounts" value={empList.filter(e=>e.role==='staff').length} icon={<KeySquare className="w-5 h-5 text-amber-500" />} />
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">
-            <SearchBar value={search} onChange={setSearch} placeholder="Search employees by name or email…" className="w-full sm:w-80" />
+            <SearchBar value={search} onChange={setSearch} placeholder="Search ID, name, email, phone, role, status…" className="w-full sm:w-80" />
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} employees</span>
           </div>
         </CardHeader>
         <Table maxHeight={400}>
             <Thead>
               <Tr>
+                <Th>Employee ID</Th>
                 <Th>Employee Profile</Th>
                 <Th>Role</Th>
-                <Th>Contact Information</Th>
-                <Th>Date Joined</Th>
+                <Th>Email Address</Th>
+                <Th>Contact Number</Th>
                 <Th>Last Login</Th>
                 <Th>Status</Th>
                 <Th align="center">Actions</Th>
               </Tr>
             </Thead>
             <Tbody>
-              {filtered.map(emp => (
+              {loading ? (
+                <Tr><Td colSpan={8} align="center"><span className="text-slate-500 py-6 block">Loading employees…</span></Td></Tr>
+              ) : error ? (
+                <Tr><Td colSpan={8} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+              ) : filtered.length === 0 ? (
+                <Tr><Td colSpan={8} align="center"><span className="text-slate-500 py-6 block">No employees found.</span></Td></Tr>
+              ) : filtered.map(emp => (
                 <Tr key={emp.id} onClick={() => setShowView(emp)}>
+                  <Td className="num text-xs font-semibold text-blue-600">{emp.id}</Td>
                   <Td>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-inner">
-                        {emp.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-900 leading-tight">{emp.name}</p>
-                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">{emp.id}</p>
-                      </div>
+                      <Avatar name={emp.name} src={emp.avatarUrl} size="sm" />
+                      <span className="font-semibold text-slate-900">{emp.name}</span>
                     </div>
                   </Td>
-                  <Td><Badge variant={emp.role === 'admin' ? 'admin' : 'staff'}>{emp.role === 'admin' ? 'Admin / Admin' : 'Staff / Staff'}</Badge></Td>
-                  <Td>
-                    <p className="text-sm font-medium text-slate-700">{emp.email}</p>
-                    <p className="text-xs text-slate-500 font-mono mt-0.5">{emp.phone}</p>
-                  </Td>
-                  <Td className="text-sm text-slate-600 font-medium">{fmt.date(emp.joined)}</Td>
-                  <Td className="font-mono text-xs text-slate-500">{emp.lastLogin}</Td>
+                  <Td><Badge variant={emp.role === 'admin' ? 'admin' : 'staff'}>{emp.role === 'admin' ? 'Admin' : 'Staff'}</Badge></Td>
+                  <Td className="text-sm text-slate-700">{emp.email}</Td>
+                  <Td className="num text-sm text-slate-600">{emp.phone || '—'}</Td>
+                  <Td className="num text-xs text-slate-500">{emp.lastLogin ? fmt.datetime(emp.lastLogin) : 'Never'}</Td>
                   <Td><Badge variant={emp.status === 'active' ? 'active' : 'inactive'}>{emp.status.toUpperCase()}</Badge></Td>
                   <Td align="center">
-                    <div className="flex gap-1 justify-center" onClick={e => e.stopPropagation()}>
-                      <Button size="xs" variant="ghost" onClick={() => setShowView(emp)} icon={<Eye className="w-4 h-4"/>} title="View Profile" />
-                      <Button size="xs" variant="ghost" className={emp.status === 'active' ? 'text-red-500 hover:bg-red-50 hover:text-red-600' : 'text-green-500 hover:bg-green-50 hover:text-green-600'} onClick={() => setConfirmDeact(emp)} icon={emp.status === 'active' ? <XCircle className="w-4 h-4"/> : <CheckCircle2 className="w-4 h-4" />} title={emp.status === 'active' ? 'Deactivate' : 'Activate'} />
-                    </div>
+                    <RowActions>
+                      <ViewAction onClick={() => setShowView(emp)} title="View profile" />
+                      <EditAction onClick={() => openEdit(emp)} title="Edit employee" />
+                      <DeleteAction onClick={() => setConfirmDeact(emp)} title={emp.status === 'active' ? 'Deactivate account' : 'Activate account'} />
+                    </RowActions>
                   </Td>
                 </Tr>
               ))}
@@ -120,17 +206,17 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 
       {/* Add Modal */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Create Employee Account" size="md"
-        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" onClick={handleAdd}>Create Account</Button></>}>
+        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" loading={saving} onClick={handleAdd}>Create Account</Button></>}>
         <div className="space-y-4">
           <Input label="Full Name *" placeholder="e.g. Maria Santos" value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} />
           <Select label="System Role *" value={form.role} onChange={e => setForm(p => ({...p, role: e.target.value}))}
-            options={[{ value: 'admin', label: 'Admin / Admin' }, { value: 'staff', label: 'Staff / Staff' }]} />
+            options={[{ value: 'admin', label: 'Admin' }, { value: 'staff', label: 'Staff' }]} />
           <Input label="Email Address *" type="email" placeholder="employee@alms.ph" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} />
           <Input label="Phone Number" placeholder="09XXXXXXXXX" value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} />
           
           <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-800 flex gap-3 items-start mt-2">
             <ShieldAlert className="w-4 h-4 flex-shrink-0 text-blue-600 mt-0.5" />
-            <p>A temporary password will be securely generated and sent to the employee's email. They will be required to change it on their first login.</p>
+            <p>This creates the employee record only. To give them a login, add a user with the same email in Supabase → Authentication → Users; the account links automatically.</p>
           </div>
         </div>
       </Modal>
@@ -141,30 +227,54 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           footer={<Button variant="outline" className="w-full justify-center" onClick={() => setShowView(null)}>Close Profile</Button>}>
           <div className="space-y-4">
             <div className="text-center pb-4 border-b border-slate-100">
-              <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-3 shadow-inner">
-                {showView.name.charAt(0)}
+              <div className="flex justify-center mb-3">
+                <Avatar name={showView.name} src={showView.avatarUrl} size="md" />
               </div>
               <h3 className="font-bold text-slate-900 text-lg leading-tight">{showView.name}</h3>
-              <Badge variant={showView.role === 'admin' ? 'admin' : 'staff'} className="mt-2">{showView.role === 'admin' ? 'Admin / Admin' : 'Staff / Staff'}</Badge>
+              <Badge variant={showView.role === 'admin' ? 'admin' : 'staff'} className="mt-2">{showView.role === 'admin' ? 'Admin' : 'Staff'}</Badge>
             </div>
             <div className="space-y-3">
               <StatRow label="Employee ID" value={showView.id} mono />
               <StatRow label="Email" value={showView.email} />
               <StatRow label="Phone" value={showView.phone} />
-              <StatRow label="Date Joined" value={fmt.date(showView.joined)} />
-              <StatRow label="Last Login" value={showView.lastLogin} mono />
+              <StatRow label="Date Joined" value={showView.joined ? fmt.date(showView.joined) : '—'} />
+              <StatRow label="Last Login" value={showView.lastLogin ? fmt.datetime(showView.lastLogin) : 'Never'} mono />
               <StatRow label="Status" value={<Badge variant={showView.status === 'active' ? 'active' : 'inactive'}>{showView.status.toUpperCase()}</Badge>} />
             </div>
           </div>
         </Modal>
       )}
 
+      <Modal
+        open={!!editEmp}
+        onClose={() => setEditEmp(null)}
+        title={`Edit ${editEmp?.name ?? 'Employee'}`}
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditEmp(null)}>Cancel</Button>
+            <Button variant="primary" loading={saving} onClick={saveEdit}>Save Changes</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Full Name *" value={editForm.name}
+            onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
+          <Select label="System Role *" value={editForm.role}
+            onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+            options={[{ value: 'admin', label: 'Admin' }, { value: 'staff', label: 'Staff' }]} />
+          <Input label="Contact Number" value={editForm.phone}
+            onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} />
+          <Input label="Email Address" value={editEmp?.email ?? ''} disabled />
+          <p className="text-xs text-slate-400">
+            The e-mail is the link to the Supabase Auth login and cannot be changed here.
+          </p>
+        </div>
+      </Modal>
+
       <Confirm
         open={!!confirmDeact} onClose={() => setConfirmDeact(null)}
-        onConfirm={() => {
-          setEmpList(p => p.map(e => e.id === confirmDeact.id ? {...e, status: e.status === 'active' ? 'inactive' : 'active'} : e));
-          toast.success(`Account ${confirmDeact.status === 'active' ? 'deactivated' : 'activated'} successfully.`);
-        }}
+        onConfirm={() => { if (confirmDeact) void handleToggleStatus(confirmDeact); }}
         title={confirmDeact?.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
         message={`Are you sure you want to ${confirmDeact?.status === 'active' ? 'deactivate' : 'activate'} ${confirmDeact?.name}'s account?`}
         confirmLabel={confirmDeact?.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
@@ -177,7 +287,7 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 function RolesPage() {
   const roles = [
     {
-      name: 'Admin / Admin', count: 1,
+      name: 'Admin', count: 1,
       permissions: [
         'View Dashboard', 'User Management', 'Laundry Operations', 'Water Refilling',
         'Payment Management', 'Inventory Management', 'Finance Management',
@@ -188,7 +298,7 @@ function RolesPage() {
       restricted: [],
     },
     {
-      name: 'Staff / Staff', count: 3,
+      name: 'Staff', count: 3,
       permissions: [
         'View Dashboard', 'Laundry Operations', 'Water Refilling',
         'Payment Management (Basic)', 'Inventory (View Only)',
@@ -266,8 +376,9 @@ function RolesPage() {
 
 function ActivityLogsPage() {
   const [search, setSearch] = useState('');
-  
-  const filtered = activityLogs.filter(l =>
+  const { data: logs, loading, error } = useAsync<ActivityLog[]>(() => activityService.list(), []);
+
+  const filtered = logs.filter(l =>
     l.employee.toLowerCase().includes(search.toLowerCase()) ||
     l.action.toLowerCase().includes(search.toLowerCase()) ||
     l.module.toLowerCase().includes(search.toLowerCase())
@@ -301,9 +412,15 @@ function ActivityLogsPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {filtered.map(log => (
+            {loading ? (
+              <Tr><Td colSpan={5} align="center"><span className="text-slate-500 py-6 block">Loading activity…</span></Td></Tr>
+            ) : error ? (
+              <Tr><Td colSpan={5} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+            ) : filtered.length === 0 ? (
+              <Tr><Td colSpan={5} align="center"><span className="text-slate-500 py-6 block">No activity recorded yet.</span></Td></Tr>
+            ) : filtered.map(log => (
               <Tr key={log.id}>
-                <Td className="font-mono text-xs font-medium text-slate-500">{log.datetime}</Td>
+                <Td className="font-mono text-xs font-medium text-slate-500">{fmt.datetime(log.datetime)}</Td>
                 <Td className="font-semibold text-slate-800">{log.employee}</Td>
                 <Td>
                   <span className={`inline-flex items-center text-[11px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${moduleColors[log.module] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>

@@ -1,12 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import logo from '../assets/logo.png';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useInventory } from '../context/DataContext';
 import { Confirm } from './ui';
-import { 
-  LayoutDashboard, Users, Droplet, Waves, CreditCard, 
-  Package, TrendingUp, BarChart3, Settings, LogOut, 
-  Search, Bell, ChevronRight, ChevronDown, User, Menu, X, Check
+import { Avatar } from './Avatar';
+import {
+  LayoutDashboard,
+  Users,
+  Droplet,
+  Waves,
+  CreditCard,
+  Package,
+  TrendingUp,
+  BarChart3,
+  Settings,
+  LogOut,
+  Search,
+  Bell,
+  ChevronRight,
+  ChevronDown,
+  User,
+  Menu,
+  X
 } from 'lucide-react';
 
 export type PageId =
@@ -38,7 +54,7 @@ const navItems: NavItem[] = [
       { id: 'laundry-new', path: '/laundry/new', label: 'New Order' },
       { id: 'laundry-orders', path: '/laundry/orders', label: 'Order Tracker' },
       { id: 'laundry-history', path: '/laundry/history', label: 'Sales History' },
-      { id: 'laundry-services', path: '/laundry/services', label: 'Manage Services', adminOnly: true },
+      { id: 'laundry-services', path: '/laundry/services', label: 'Products and Services', adminOnly: true },
     ],
   },
   {
@@ -46,14 +62,14 @@ const navItems: NavItem[] = [
     children: [
       { id: 'water-new', path: '/water/new', label: 'New Sale' },
       { id: 'water-history', path: '/water/history', label: 'Sales History' },
-      { id: 'water-products', path: '/water/products', label: 'Manage Products', adminOnly: true },
+      { id: 'water-products', path: '/water/products', label: 'Products and Services', adminOnly: true },
     ],
   },
   {
     id: 'payments', path: '/payments', label: 'Payments', icon: <CreditCard className="w-5 h-5" />,
     children: [
       { id: 'payments-new', path: '/payments/new', label: 'Record Payment' },
-      { id: 'payments-history', path: '/payments/history', label: 'Payment Ledger' },
+      { id: 'payments-history', path: '/payments/history', label: 'Payment History' },
     ],
   },
   {
@@ -96,7 +112,7 @@ const pageTitle: Record<string, string> = {
   '/inventory/suppliers': 'Suppliers', '/inventory/purchase': 'Purchase Orders',
   '/finance': 'Finance', '/finance/expenses': 'Expense Management', '/finance/reports': 'Financial Reports',
   '/analytics': 'Business Analytics',
-  '/water/products': 'Manage Water Products', '/laundry/services': 'Manage Laundry Services',
+  '/water/products': 'Water Products and Services', '/laundry/services': 'Laundry Products and Services',
   '/settings': 'Settings', '/profile': 'My Profile', '/change-password': 'Change Password',
   '/users/activity-logs': 'System Logs',
 };
@@ -198,12 +214,12 @@ export default function Layout() {
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col w-[240px] flex-shrink-0 bg-slate-900 border-r border-slate-800 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="px-6 py-5 border-b border-slate-800 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Droplet className="w-5 h-5 text-white" />
+            <div className="w-11 h-9 rounded bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <img src={logo} alt="ALMS Logo" className="w-10 h-11 object-contain" />
             </div>
             <div>
-              <div className="text-white font-bold text-sm tracking-wide">ALMS</div>
-              <div className="text-blue-400 text-[9px] font-semibold uppercase tracking-wide leading-tight mt-0.5">Point of Sale and Inventory Management System</div>
+              <div className="text-white font-bold text-sm tracking-wide">ALMS POS AND</div>
+              <div className="text-blue-400 text-[9px] font-semibold uppercase tracking-wide leading-tight mt-0.5">Inventory Management System</div>
             </div>
           </div>
           <button className="lg:hidden text-slate-400 hover:text-white" onClick={() => setSidebarOpen(false)}>
@@ -328,9 +344,7 @@ export default function Layout() {
 
             <div className="relative ml-1" onClick={e => e.stopPropagation()}>
               <button onClick={() => { setProfileOpen(p => !p); setNotifOpen(false); }} className="flex items-center gap-1.5 pl-1 pr-1 py-1 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold border border-blue-200 flex-shrink-0">
-                  {userName.charAt(0)}
-                </div>
+                <Avatar name={userName} src={auth.avatarUrl} size="xs" className="sm:w-7 sm:h-7" />
                 <div className="text-left hidden md:block pr-1">
                   <div className="text-[11px] font-semibold text-slate-900 whitespace-nowrap">{userName}</div>
                   <div className="text-[10px] text-slate-500 capitalize font-medium">{userRole}</div>
@@ -340,9 +354,12 @@ export default function Layout() {
               
               {profileOpen && (
                 <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-50 py-1">
-                  <div className="px-4 py-3 border-b border-slate-100">
-                    <p className="text-sm font-bold text-slate-900">{userName}</p>
-                    <p className="text-xs text-slate-500 capitalize">{userRole}</p>
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+                    <Avatar name={userName} src={auth.avatarUrl} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 truncate">{userName}</p>
+                      <p className="text-xs text-slate-500 capitalize">{userRole}</p>
+                    </div>
                   </div>
                   <div className="py-1">
                     <button onClick={() => { navigate('/profile'); setProfileOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
@@ -373,7 +390,7 @@ export default function Layout() {
       <Confirm
         open={confirmLogout}
         onClose={() => setConfirmLogout(false)}
-        onConfirm={() => { logout(); navigate('/login'); }}
+        onConfirm={() => { void logout().then(() => navigate('/login')); }}
         title="Sign Out?"
         message="You will be signed out of the system and returned to the login screen."
         confirmLabel="Sign Out"

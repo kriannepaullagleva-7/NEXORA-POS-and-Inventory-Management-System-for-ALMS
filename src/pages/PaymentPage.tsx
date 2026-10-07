@@ -1,16 +1,25 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Modal, Confirm, Input, Select, Textarea, SearchBar, useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr
+  Modal, Confirm, Input, Select, Textarea, SearchBar, useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr, RowActions, ViewAction
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
+import { matchesQuery } from '../utils/search';
 import { printReceipt } from '../utils/pdf';
-import { payments } from '../data/payments';
-import { laundryOrders } from '../data/laundry';
-import { waterSales } from '../data/water';
+import { useAsync } from '../hooks/useAsync';
+import { paymentService } from '../services/paymentService';
+import { laundryService } from '../services/laundryService';
+import { waterService } from '../services/waterService';
+import { activityService } from '../services/activityService';
+import { useAuth } from '../context/AuthContext';
 import {
-  Banknote, CreditCard, ChevronLeft, Plus, Smartphone,
-  ReceiptText, History, FileText, CheckCircle2, AlertCircle, XCircle
+  Banknote,
+  ChevronLeft,
+  Plus,
+  Smartphone,
+  ReceiptText,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import type { PageId } from '../components/Layout';
 
@@ -24,6 +33,7 @@ export default function PaymentPage({ subPage, onNavigate, userName }: Props) {
 // ─── Payment Ledger ───────────────────────────────────────────────────────────
 function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const toast = useToast();
+  const { data: payments, loading, error } = useAsync(() => paymentService.list(), []);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -58,10 +68,11 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const totalDebt = debtRecords.reduce((a, p) => a + p.balance, 0);
 
   const filtered = payments.filter(p => {
-    const matchSearch = p.id.toLowerCase().includes(search.toLowerCase()) ||
-      (p.linkedTo && p.linkedTo.toLowerCase().includes(search.toLowerCase())) ||
-      p.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      p.processedBy.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = matchesQuery(
+      search,
+      p.id, p.linkedTo, p.customerName, p.processedBy, p.description,
+      p.type, p.method, p.status, p.amount, p.balance, p.gcashRef, p.date
+    );
     const matchMethod = methodFilter === 'all' || p.method === methodFilter || (methodFilter === 'unpaid' && p.method === 'unpaid');
     const matchType = typeFilter === 'all' || p.type === typeFilter;
     const matchStatus = statusFilter === 'all' || p.status === statusFilter;
@@ -99,7 +110,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <SearchBar value={search} onChange={setSearch} placeholder="Search payment #, order #, or customer…" className="w-full sm:w-80" />
+            <SearchBar value={search} onChange={setSearch} placeholder="Search payment, order, customer, method, status…" className="w-full sm:w-80" />
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <Select options={[
                 { label: 'All Payments', value: 'all' }, { label: 'Cash', value: 'cash' }, { label: 'GCash', value: 'gcash' }, { label: 'Unpaid / Debt', value: 'unpaid' }
@@ -130,26 +141,24 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               </Tr>
             </Thead>
             <Tbody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <Tr><Td colSpan={10} align="center"><span className="text-slate-500 py-6 block">Loading payments…</span></Td></Tr>
+              ) : error ? (
+                <Tr><Td colSpan={10} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+              ) : filtered.length === 0 ? (
                 <Tr><Td colSpan={10} align="center"><span className="text-slate-500 py-6 block">No payments match your filters</span></Td></Tr>
               ) : filtered.map(pay => (
                 <Tr key={pay.id} onClick={() => setViewPayment(pay)}>
-                  <Td>
-                    <div className="font-mono text-xs font-semibold text-blue-600">{pay.id}</div>
-                    {pay.linkedTo && <div className="text-[10px] text-slate-400 font-mono mt-0.5">ref: {pay.linkedTo}</div>}
-                  </Td>
-                  <Td>
-                    <div className="font-medium text-slate-800">{pay.customerName}</div>
-                    {pay.description && <div className="text-[10px] text-slate-500 truncate max-w-[150px]">{pay.description}</div>}
-                  </Td>
+                  <Td className="num text-xs font-semibold text-blue-600">{pay.id}</Td>
+                  <Td className="font-medium text-slate-800">{pay.customerName}</Td>
                   <Td>
                     <Badge variant={pay.type === 'laundry' ? 'blue' : pay.type === 'water' ? 'green' : 'red'}>
                       {pay.type === 'laundry' ? 'Laundry' : pay.type === 'water' ? 'Water' : 'Debt'}
                     </Badge>
                   </Td>
-                  <Td align="right" className="font-mono font-semibold text-slate-900">{fmt.peso(pay.amount)}</Td>
-                  <Td align="right" className="font-mono text-slate-600">{fmt.peso(pay.amtReceived)}</Td>
-                  <Td align="right" className={`font-mono font-bold ${pay.balance > 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                  <Td align="right" className="num font-semibold text-slate-900">{fmt.peso(pay.amount)}</Td>
+                  <Td align="right" className="num text-slate-600">{fmt.peso(pay.amtReceived)}</Td>
+                  <Td align="right" className={`num font-bold ${pay.balance > 0 ? 'text-red-600' : 'text-slate-300'}`}>
                     {pay.balance > 0 ? fmt.peso(pay.balance) : '—'}
                   </Td>
                   <Td>{methodBadge(pay.method)}</Td>
@@ -158,9 +167,11 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
                       {pay.status === 'paid' ? 'Paid' : pay.status === 'partial' ? 'Partial' : pay.type === 'debt' ? 'Debt' : 'Unpaid'}
                     </Badge>
                   </Td>
-                  <Td className="text-xs text-slate-500 font-medium">{fmt.datetime(pay.date)}</Td>
+                  <Td className="num text-xs text-slate-500">{fmt.datetime(pay.date)}</Td>
                   <Td align="center">
-                    <Button size="xs" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewPayment(pay); }} icon={<ReceiptText className="w-4 h-4 text-slate-500" />} title="View Details" />
+                    <RowActions>
+                      <ViewAction onClick={() => setViewPayment(pay)} />
+                    </RowActions>
                   </Td>
                 </Tr>
               ))}
@@ -264,6 +275,12 @@ function RecordPaymentPage({ onNavigate, userName }: { onNavigate: (p: PageId) =
   const [debtAmount, setDebtAmount] = useState('');
   const [debtDesc, setDebtDesc] = useState('');
 
+  const { employee } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
+
+  const { data: laundryOrders } = useAsync(() => laundryService.listOrders(), []);
+  const { data: waterSales } = useAsync(() => waterService.listSales(), []);
+
   const orders = recordType === 'laundry'
     ? laundryOrders.filter(o => !['released', 'cancelled'].includes(o.status) && o.paymentStatus !== 'paid')
     : recordType === 'water' ? waterSales : [];
@@ -282,23 +299,76 @@ function RecordPaymentPage({ onNavigate, userName }: { onNavigate: (p: PageId) =
   const change = paymentMethod === 'unpaid' ? 0 : Math.max(0, received - outstanding);
   const balance = paymentMethod === 'unpaid' ? outstanding : Math.max(0, outstanding - received);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isDebtMode) {
       if (!debtCustomer.trim()) { toast.error('Enter customer name.'); return; }
       if (!debtAmount || parseFloat(debtAmount) <= 0) { toast.error('Enter valid debt amount.'); return; }
       if (!debtDesc.trim()) { toast.error('Enter a description for the debt.'); return; }
-      toast.success(`Debt record created for ${debtCustomer}`);
     } else {
       if (!selectedOrder) { toast.error('Select an order first.'); return; }
       if (!paymentMethod) { toast.error('Select a payment method.'); return; }
       if (paymentMethod !== 'unpaid' && (!amountReceived || received <= 0)) { toast.error('Enter amount received.'); return; }
       if (paymentMethod === 'gcash' && !gcashRef) { toast.error('Enter GCash reference number.'); return; }
-
-      const status = paymentMethod === 'unpaid' ? 'unpaid' : (received >= outstanding ? 'paid' : 'partial');
-      toast.success(`Payment recorded for ${selectedOrder.id}. Status: ${status.toUpperCase()}`);
-      if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
     }
-    onNavigate('payments');
+
+    setSubmitting(true);
+    try {
+      if (isDebtMode) {
+        const amount = parseFloat(debtAmount);
+        await paymentService.create({
+          customerName: debtCustomer.trim(),
+          type: 'debt',
+          description: debtDesc.trim(),
+          amount,
+          amtReceived: 0,
+          change: 0,
+          balance: amount,
+          method: 'unpaid',
+          status: 'unpaid',
+          processedBy: userName,
+        });
+        await activityService.log(employee?.id ?? null, 'Payment', `Recorded debt of ${fmt.peso(amount)} for ${debtCustomer.trim()}`);
+        toast.success(`Debt record created for ${debtCustomer}`);
+      } else {
+        const status = paymentMethod === 'unpaid' ? 'unpaid' : received >= outstanding ? 'paid' : 'partial';
+        const isLaundry = recordType === 'laundry';
+
+        await paymentService.create({
+          laundryOrderId: isLaundry ? selectedOrder.id : null,
+          waterTransactionId: isLaundry ? null : selectedOrder.id,
+          customerId: selectedOrder.customerId ?? null,
+          customerName: selectedOrder.customerName,
+          type: isLaundry ? 'laundry' : 'water',
+          amount: outstanding,
+          amtReceived: paymentMethod === 'unpaid' ? 0 : received,
+          change,
+          balance,
+          method: paymentMethod,
+          status,
+          gcashRef,
+          processedBy: userName,
+        });
+
+        // Keep the originating order's payment state in step with the ledger.
+        if (isLaundry && paymentMethod !== 'unpaid') {
+          await laundryService.markPaid(selectedOrder.id, received, paymentMethod, gcashRef);
+        }
+
+        await activityService.log(
+          employee?.id ?? null,
+          'Payment',
+          `Recorded ${paymentMethod.toUpperCase()} payment of ${fmt.peso(received)} for ${selectedOrder.id}`
+        );
+
+        toast.success(`Payment recorded for ${selectedOrder.id}. Status: ${status.toUpperCase()}`);
+        if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
+      }
+      onNavigate('payments');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not record the transaction.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -460,7 +530,7 @@ function RecordPaymentPage({ onNavigate, userName }: { onNavigate: (p: PageId) =
 
       <div className="flex justify-end gap-3 pt-2">
         <Button variant="ghost" onClick={() => onNavigate('payments')}>Cancel</Button>
-        <Button variant="primary" onClick={handleSubmit}
+        <Button variant="primary" loading={submitting} onClick={handleSubmit}
           disabled={isDebtMode ? false : (!selectedOrder || !paymentMethod || (paymentMethod !== 'unpaid' && !amountReceived))}>
           {isDebtMode ? 'Create Debt Record' : 'Confirm Transaction'}
         </Button>

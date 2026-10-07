@@ -1,20 +1,58 @@
-import React, { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Confirm, Input, Textarea,
-  SearchBar, useToast, KpiCard, StatRow
+  PageHeader,
+  Card,
+  CardHeader,
+  CardBody,
+  Badge,
+  Button,
+  Table,
+  Thead,
+  Tbody,
+  Th,
+  Td,
+  Tr,
+  Modal,
+  Confirm,
+  Input,
+  Textarea,
+  SearchBar,
+  useToast,
+  KpiCard,
+  RowActions,
+  ViewAction,
+  EditAction,
+  DeleteAction
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
+import { matchesQuery } from '../utils/search';
 import { printReceipt } from '../utils/pdf';
-import { laundryOrders, laundryAddons } from '../data/laundry';
-import { customers } from '../data/customers';
-import { useProducts } from '../context/DataContext';
+import { useAsync } from '../hooks/useAsync';
+import { laundryService } from '../services/laundryService';
+import { paymentService } from '../services/paymentService';
+import { activityService } from '../services/activityService';
+import { customerService } from '../services/customerService';
+import { useProducts, useCustomers } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
+import type { LaundryOrder, LaundryStatus } from '../types/models';
 import ProductCatalog from '../components/ProductCatalog';
 import {
-  WashingMachine, Banknote, Smartphone, ShoppingCart,
-  Search, Plus, MapPin, Truck, ChevronLeft, Droplet,
-  CheckCircle2, AlertCircle, ReceiptText, Tag, Clock, Package,
-  History, Shirt, PlusCircle, MinusCircle, XCircle
+  WashingMachine,
+  Banknote,
+  Smartphone,
+  Plus,
+  ChevronLeft,
+  CheckCircle2,
+  AlertCircle,
+  ReceiptText,
+  Tag,
+  Clock,
+  Package,
+  History,
+  Shirt,
+  PlusCircle,
+  MinusCircle,
+  XCircle
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -45,12 +83,17 @@ const NEXT_LABEL: Record<string, string> = {
 
 // ─── Order Tracker ───────────────────────────────────────────────────────────
 function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
-  const [orders, setOrders] = useState(laundryOrders);
+  const { data: orders, loading, error, reload } = useAsync(() => laundryService.listOrders(), []);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
-  const [viewOrder, setViewOrder] = useState<any>(null);
+  const [viewOrder, setViewOrder] = useState<LaundryOrder | null>(null);
+  const [editOrder, setEditOrder] = useState<LaundryOrder | null>(null);
+  const [editForm, setEditForm] = useState({ customerName: '', phone: '', notes: '', discount: '' });
+  const [deleteTarget, setDeleteTarget] = useState<LaundryOrder | null>(null);
+  const [busy, setBusy] = useState(false);
   const [confirmPrint, setConfirmPrint] = useState(false);
   const toast = useToast();
+  const { employee } = useAuth();
 
   const printOrderReceipt = (order: any) => {
     printReceipt({
@@ -86,24 +129,89 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 
   const filtered = orders.filter(o =>
     (tab === 'all' || o.status === tab) &&
-    (o.id.toLowerCase().includes(search.toLowerCase()) || o.customerName.toLowerCase().includes(search.toLowerCase()))
+    matchesQuery(
+      search,
+      o.id, o.customerName, o.phone, o.date, o.total, o.processedBy, o.notes,
+      o.paymentMethod, o.paymentStatus, STATUS_LABELS[o.status],
+      o.services.map(sv => sv.name), o.addons.map(a => a.name)
+    )
   );
 
-  const updateStatus = (order: any) => {
-    const newStatus = NEXT_STATUS[order.status];
-    setOrders(p => p.map(o => o.id === order.id ? {...o, status: newStatus as any} : o));
-    if (newStatus === 'ready') {
-      toast.success(`Order ${order.id} marked Ready for Pickup.`);
-    } else {
-      toast.success(`Order ${order.id} → ${STATUS_LABELS[newStatus]}`);
+  const applyStatus = async (order: LaundryOrder, newStatus: LaundryStatus, message: string) => {
+    try {
+      const updated = await laundryService.updateStatus(order.id, newStatus);
+      await activityService.log(employee?.id ?? null, 'Laundry', `Updated ${order.id} status to ${STATUS_LABELS[newStatus]}`);
+      toast.success(message);
+      if (viewOrder?.id === order.id) setViewOrder(updated);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the order.');
     }
-    if (viewOrder?.id === order.id) setViewOrder((p:any) => ({...p, status: newStatus}));
   };
 
-  const cancelOrder = (order: any) => {
-    setOrders(p => p.map(o => o.id === order.id ? {...o, status:'cancelled'} : o));
-    toast.success(`Order ${order.id} cancelled.`);
-    if (viewOrder?.id === order.id) setViewOrder((p:any) => ({...p, status: 'cancelled'}));
+  const updateStatus = (order: LaundryOrder) => {
+    const newStatus = NEXT_STATUS[order.status] as LaundryStatus;
+    void applyStatus(
+      order,
+      newStatus,
+      newStatus === 'ready' ? `Order ${order.id} marked Ready for Pickup.` : `Order ${order.id} → ${STATUS_LABELS[newStatus]}`
+    );
+  };
+
+  const cancelOrder = (order: LaundryOrder) => {
+    void applyStatus(order, 'cancelled', `Order ${order.id} cancelled.`);
+  };
+
+  const openEdit = (order: LaundryOrder) => {
+    setEditForm({
+      customerName: order.customerName,
+      phone: order.phone,
+      notes: order.notes,
+      discount: String(order.discount || 0),
+    });
+    setEditOrder(order);
+  };
+
+  const saveEdit = async () => {
+    if (!editOrder) return;
+    if (!editForm.customerName.trim()) { toast.error('Customer name is required.'); return; }
+    const discount = parseFloat(editForm.discount) || 0;
+    if (discount < 0) { toast.error('Discount cannot be negative.'); return; }
+    if (discount > editOrder.subtotal) { toast.error('Discount cannot exceed the order subtotal.'); return; }
+
+    setBusy(true);
+    try {
+      const updated = await laundryService.updateOrder(editOrder.id, {
+        customerName: editForm.customerName.trim(),
+        phone: editForm.phone.trim(),
+        notes: editForm.notes.trim(),
+        discount,
+      });
+      await activityService.log(employee?.id ?? null, 'Laundry', `Edited laundry order ${updated.id}`);
+      toast.success(`Order ${updated.id} updated.`);
+      if (viewOrder?.id === updated.id) setViewOrder(updated);
+      setEditOrder(null);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the order.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeOrder = async () => {
+    if (!deleteTarget) return;
+    try {
+      await laundryService.deleteOrder(deleteTarget.id);
+      await activityService.log(employee?.id ?? null, 'Laundry', `Deleted laundry order ${deleteTarget.id}`);
+      toast.success(`Order ${deleteTarget.id} deleted.`);
+      if (viewOrder?.id === deleteTarget.id) setViewOrder(null);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete the order.');
+    } finally {
+      setDeleteTarget(null);
+    }
   };
 
   const methodBadge = (method: string) => {
@@ -147,7 +255,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 
       <Card>
         <CardHeader>
-          <SearchBar value={search} onChange={setSearch} placeholder="Search by order # or customer name…" className="w-full sm:w-80" />
+          <SearchBar value={search} onChange={setSearch} placeholder="Search orders, customer, phone, service, status…" className="w-full sm:w-80" />
         </CardHeader>
         <Table maxHeight={350}>
             <Thead>
@@ -155,31 +263,31 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               <Th>Order ID</Th>
               <Th>Customer</Th>
               <Th>Date Received</Th>
-              <Th>Services</Th>
+              <Th align="center">Items</Th>
               <Th align="right">Total</Th>
-              <Th>Method</Th><Th>Payment</Th>
+              <Th>Method</Th>
+              <Th>Payment</Th>
               <Th>Status</Th>
               <Th align="center">Actions</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {filtered.length === 0 ? (
-              <Tr><Td colSpan={8} align="center"><span className="text-slate-500 py-6 block">No orders found</span></Td></Tr>
+            {loading ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">Loading orders…</span></Td></Tr>
+            ) : error ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+            ) : filtered.length === 0 ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No orders found</span></Td></Tr>
             ) : filtered.map(order => (
               <Tr key={order.id} onClick={() => setViewOrder(order)}>
-                <Td className="font-mono text-xs font-semibold text-blue-600">{order.id}</Td>
-                <Td>
-                  <p className="font-medium text-slate-800">{order.customerName}</p>
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">{order.phone}</p>
-                </Td>
-                <Td className="text-xs text-slate-500 font-medium">{fmt.shortDate(order.date)}</Td>
-                <Td className="text-xs text-slate-600 max-w-[200px] truncate" title={order.services.map((s:any) => s.name).join(', ')}>
-                  {order.services.map((s:any) => s.name).join(', ')}
-                </Td>
-                <Td align="right" className="font-mono font-bold text-slate-900">{fmt.peso(order.total)}</Td>
+                <Td className="num text-xs font-semibold text-blue-600">{order.id}</Td>
+                <Td className="font-medium text-slate-800">{order.customerName}</Td>
+                <Td className="num text-xs text-slate-500">{fmt.shortDate(order.date)}</Td>
+                <Td className="num text-sm text-slate-600">{order.services.length}</Td>
+                <Td align="right" className="num font-bold text-slate-900">{fmt.peso(order.total)}</Td>
                 <Td>
                   <span className={`text-xs font-bold ${order.paymentMethod==='gcash'?'text-blue-600':order.paymentMethod==='cash'?'text-emerald-600':'text-slate-400'}`}>
-                    {order.paymentMethod ? order.paymentMethod.toUpperCase() : '—'}
+                    {order.paymentMethod && order.paymentMethod !== 'unpaid' ? order.paymentMethod.toUpperCase() : '—'}
                   </span>
                 </Td>
                 <Td>
@@ -189,7 +297,19 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
                 </Td>
                 <Td><Badge variant={STATUS_BADGE[order.status]}>{STATUS_LABELS[order.status]}</Badge></Td>
                 <Td align="center">
-                  <Button size="xs" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewOrder(order); }} icon={<ReceiptText className="w-4 h-4 text-slate-500" />} title="View details" />
+                  <RowActions>
+                    <ViewAction onClick={() => setViewOrder(order)} />
+                    <EditAction
+                      onClick={() => openEdit(order)}
+                      disabled={laundryService.isLocked(order)}
+                      title={laundryService.isLocked(order) ? 'Released and paid orders cannot be edited' : 'Edit order'}
+                    />
+                    <DeleteAction
+                      onClick={() => setDeleteTarget(order)}
+                      disabled={laundryService.isLocked(order)}
+                      title={laundryService.isLocked(order) ? 'Released and paid orders cannot be deleted' : 'Delete order'}
+                    />
+                  </RowActions>
                 </Td>
               </Tr>
             ))}
@@ -294,6 +414,49 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         </Modal>
       )}
 
+      {/* Edit Order */}
+      <Modal
+        open={!!editOrder}
+        onClose={() => setEditOrder(null)}
+        title={`Edit Order ${editOrder?.id ?? ''}`}
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditOrder(null)}>Cancel</Button>
+            <Button variant="primary" loading={busy} onClick={saveEdit}>Save Changes</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Customer Name *" value={editForm.customerName}
+            onChange={e => setEditForm(p => ({ ...p, customerName: e.target.value }))} />
+          <Input label="Contact Number" value={editForm.phone}
+            onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} />
+          <Input label="Discount (₱)" type="number" min={0} value={editForm.discount}
+            onChange={e => setEditForm(p => ({ ...p, discount: e.target.value }))} />
+          <Textarea label="Notes" rows={2} value={editForm.notes}
+            onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
+
+          {editOrder && (
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="num font-medium">{fmt.peso(editOrder.subtotal)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">New Total</span><span className="num font-bold text-slate-900">{fmt.peso(Math.max(0, editOrder.subtotal - (parseFloat(editForm.discount) || 0)))}</span></div>
+              <p className="text-xs text-slate-400 pt-1">Service lines keep the price they were sold at.</p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <Confirm
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={removeOrder}
+        title={`Delete ${deleteTarget?.id ?? ''}?`}
+        message="This removes the order and its service lines. Any recorded payment stays in the ledger. This cannot be undone."
+        confirmLabel="Delete Order"
+        danger
+      />
+
       <Confirm
         open={confirmPrint}
         onClose={() => setConfirmPrint(false)}
@@ -307,11 +470,15 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 }
 
 // ─── Laundry POS ────────────────────────────────────────────────────────────────
-interface CartLine { svcId: string; name: string; price: number; qty: number; unit: string; subtotal: number; }
+interface CartLine { svcId: string; name: string; price: number; qty: number; unit: string; subtotal: number; maxKg?: number | null; }
 
 function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
   const toast = useToast();
   const { byModule } = useProducts();
+  const { customers } = useCustomers();
+  const { employee } = useAuth();
+  const { data: laundryAddons } = useAsync(() => laundryService.listAddons(), []);
+  const [saving, setSaving] = useState(false);
   const laundryServices = byModule('laundry').filter(p => p.active);
 
   const [custSearch, setCustSearch] = useState('');
@@ -341,9 +508,16 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
     setCart(prev => {
       const ex = prev.find(c => c.svcId === svc.id);
       if (ex) return prev.map(c => c.svcId === svc.id ? {...c, qty: c.qty + 1, subtotal: (c.qty+1)*c.price} : c);
-      return [...prev, { svcId: svc.id, name: svc.name, price: svc.price, qty: 1, unit: svc.unit, subtotal: svc.price }];
+      return [...prev, { svcId: svc.id, name: svc.name, price: svc.price, qty: 1, unit: svc.unit, subtotal: svc.price, maxKg: svc.maxKg ?? null }];
     });
   };
+
+  // These services are priced per load with a weight ceiling per load, so the
+  // useful number for the counter staff is how much weight the order covers.
+  const capacityKg = useMemo(
+    () => cart.reduce((total, line) => total + (line.maxKg ? line.maxKg * line.qty : 0), 0),
+    [cart]
+  );
 
   const updateQty = (svcId: string, qty: number) => {
     if (qty <= 0) setCart(p => p.filter(c => c.svcId !== svcId));
@@ -369,6 +543,70 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
     if (paymentMethod === 'gcash' && received > 0 && !gcashRef) { toast.error('Enter GCash reference.'); return; }
     if (paymentMethod !== 'unpaid' && received <= 0) { toast.error('Enter received amount.'); return; }
     setShowReceipt(true);
+  };
+
+  /** Writes the order (and its service/add-on lines) once the receipt is confirmed. */
+  const persistOrder = async () => {
+    setSaving(true);
+    try {
+      let customerId: string | null = selectedCustomer?.id ?? null;
+      if (!customerId && isNewCust && newCust.firstName) {
+        const created = await customerService.findOrCreate({
+          firstName: newCust.firstName,
+          lastName: newCust.lastName,
+          email: newCust.email,
+          phone: newCust.phone,
+          address: newCust.address,
+        });
+        customerId = created?.id ?? null;
+      }
+
+      const order = await laundryService.createOrder({
+        customerId,
+        customerName: custName ?? 'Walk-in',
+        phone: selectedCustomer?.phone ?? newCust.phone ?? '',
+        services: cart.map(c => ({ svcId: c.svcId, qty: c.qty, price: c.price, subtotal: c.subtotal })),
+        addons: addons.map(a => ({ id: a.id, qty: 1, price: a.price, subtotal: a.price })),
+        subtotal: cartSubtotal,
+        discount,
+        total,
+        paid: paymentMethod === 'unpaid' ? 0 : received,
+        change,
+        paymentStatus: paymentMethod === 'unpaid' ? 'unpaid' : received >= total ? 'paid' : 'partial',
+        paymentMethod: paymentMethod === 'unpaid' ? '' : paymentMethod,
+        gcashRef,
+        processedBy: userName,
+        notes,
+      });
+
+      // Mirror the sale into the payment ledger so Finance sees it.
+      if (paymentMethod !== 'unpaid' && received > 0) {
+        await paymentService.create({
+          laundryOrderId: order.id,
+          customerId,
+          customerName: order.customerName,
+          type: 'laundry',
+          amount: total,
+          amtReceived: received,
+          change,
+          balance,
+          method: paymentMethod,
+          status: received >= total ? 'paid' : 'partial',
+          gcashRef,
+          processedBy: userName,
+        });
+      }
+
+      await activityService.log(employee?.id ?? null, 'Laundry', `Created laundry order ${order.id} for ${order.customerName}`);
+
+      toast.success(`Order ${order.id} created!`);
+      if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
+      onNavigate('laundry');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save the order.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Receipt UI
@@ -448,11 +686,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
         
         <div className="flex gap-3 mt-6">
           <Button variant="outline" className="flex-1 justify-center" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
-          <Button variant="primary" className="flex-1 justify-center" onClick={() => {
-            toast.success(`Order ${orderId} created!`);
-            if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
-            onNavigate('laundry');
-          }}>Confirm & Finish</Button>
+          <Button variant="primary" className="flex-1 justify-center" loading={saving} onClick={persistOrder}>Confirm & Finish</Button>
         </div>
 
         <Confirm
@@ -568,7 +802,14 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                         <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">{inCart.qty}</div>
                       )}
                       <p className="text-sm font-bold text-slate-800 leading-tight mb-1 pr-6">{svc.name}</p>
-                      <p className="text-xs font-bold text-slate-500">{fmt.peso(svc.price)} / {svc.unit}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-slate-500">{fmt.peso(svc.price)} / {svc.unit}</p>
+                        {svc.maxKg ? (
+                          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
+                            up to {svc.maxKg}kg per {svc.unit}
+                          </span>
+                        ) : null}
+                      </div>
                       
                       {inCart && (
                         <div className="mt-3 pt-3 border-t border-blue-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
@@ -615,7 +856,12 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                 <WashingMachine className="w-5 h-5 text-blue-400" />
                 <span className="font-bold tracking-wide">Current Order</span>
               </div>
-              <Badge variant="blue" className="bg-slate-800 text-blue-400 border-none">{cart.reduce((a,c)=>a+c.qty,0)} Items</Badge>
+              <div className="flex items-center gap-2">
+                {capacityKg > 0 && (
+                  <Badge variant="gray" className="bg-slate-800 text-slate-300 border-none">up to {capacityKg}kg</Badge>
+                )}
+                <Badge variant="blue" className="bg-slate-800 text-blue-400 border-none">{cart.reduce((a,c)=>a+c.qty,0)} Items</Badge>
+              </div>
             </div>
           </div>
 
@@ -638,7 +884,10 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                       </button>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-slate-500">{c.qty} × {fmt.peso(c.price)}</div>
+                      <div className="text-xs font-semibold text-slate-500">
+                        {c.qty} × {fmt.peso(c.price)}
+                        {c.maxKg ? <span className="text-slate-400"> · up to {c.maxKg * c.qty}kg</span> : null}
+                      </div>
                       <span className="font-mono font-bold text-slate-900">{fmt.peso(c.subtotal)}</span>
                     </div>
                   </div>
@@ -726,7 +975,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                   </div>
                 )}
 
-                <Button variant="primary" size="lg" className="w-full justify-center !py-3.5" onClick={handleSave}>
+                <Button variant="primary" size="lg" className="w-full justify-center py-3.5!" onClick={handleSave}>
                   Create Order
                 </Button>
               </div>
@@ -742,7 +991,8 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
 function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
-  const completed = laundryOrders.filter(o => ['released','cancelled'].includes(o.status));
+  const { data: orders, loading } = useAsync(() => laundryService.listOrders(), []);
+  const completed = orders.filter(o => ['released','cancelled'].includes(o.status));
   const filtered = completed.filter(o =>
     (tab === 'all' || o.status === tab) &&
     (o.id.toLowerCase().includes(search.toLowerCase()) || o.customerName.toLowerCase().includes(search.toLowerCase()))
@@ -788,7 +1038,11 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
             </Tr>
           </Thead>
           <Tbody>
-            {filtered.map(o => (
+            {loading ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">Loading history…</span></Td></Tr>
+            ) : filtered.length === 0 ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No completed orders yet.</span></Td></Tr>
+            ) : filtered.map(o => (
               <Tr key={o.id}>
                 <Td className="font-mono text-xs font-semibold text-blue-600">{o.id}</Td>
                 <Td className="font-medium text-slate-800">{o.customerName}</Td>

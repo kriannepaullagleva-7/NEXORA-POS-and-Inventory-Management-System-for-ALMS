@@ -2,15 +2,17 @@ import React, { useRef, useState } from 'react';
 import {
   PageHeader, Card, CardHeader, Badge, Button,
   Table, Thead, Tbody, Th, Td, Tr, Modal, Confirm, Input, Select, Textarea,
-  SearchBar, useToast, Empty,
+  SearchBar, useToast, Empty, RowActions, ViewAction, EditAction, DeleteAction, Tabs,
 } from './ui';
 import { fmt } from '../utils/formatters';
+import { matchesQuery } from '../utils/search';
+import { DeliveryPricingPanel, AddonsPanel } from './PricingSettings';
 import { useProducts } from '../context/DataContext';
 import {
   type PosProduct, type PosModule, type PricingType,
   WATER_CATEGORIES, LAUNDRY_CATEGORIES,
 } from '../data/products';
-import { Plus, Edit, Trash2, Eye, ImageOff, Package, Loader2 } from 'lucide-react';
+import { Plus, ImageOff, Package, Loader2 } from 'lucide-react';
 
 const PRICING_TYPE_LABELS: Record<PricingType, string> = {
   per_load: 'Per Load', per_kg: 'Per Kg', per_item: 'Per Item', per_pair: 'Per Pair', per_unit: 'Per Unit',
@@ -40,6 +42,7 @@ export default function ProductCatalog({ module }: Props) {
   const { loading, error, byModule, createProduct, updateProduct, removeProduct } = useProducts();
   const toast = useToast();
 
+  const [tab, setTab] = useState<'catalog' | 'extras'>('catalog');
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [modalMode, setModalMode] = useState<'add' | 'edit' | null>(null);
@@ -57,7 +60,7 @@ export default function ProductCatalog({ module }: Props) {
 
   const filtered = list.filter(p =>
     (catFilter === 'all' || p.category === catFilter) &&
-    (p.name.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase()))
+    matchesQuery(search, p.id, p.name, p.category, p.description, p.unit, p.price, PRICING_TYPE_LABELS[p.type], p.active ? 'active' : 'inactive')
   );
 
   const openAdd = () => {
@@ -148,10 +151,32 @@ export default function ProductCatalog({ module }: Props) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Manage ${moduleLabel} ${module === 'water' ? 'Products' : 'Services'}`}
-        subtitle={`Add, edit, or retire items sold in the ${moduleLabel} POS`}
-        actions={<Button onClick={openAdd} icon={<Plus className="w-4 h-4" />}>Add {module === 'water' ? 'Product' : 'Service'}</Button>}
+        title="Products and Services"
+        subtitle={
+          module === 'water'
+            ? 'Refill products, pickup pricing and delivery charges'
+            : 'Laundry services, pricing and add-ons'
+        }
+        actions={
+          tab === 'catalog'
+            ? <Button onClick={openAdd} icon={<Plus className="w-4 h-4" />}>Add {module === 'water' ? 'Product' : 'Service'}</Button>
+            : undefined
+        }
       />
+
+      <Tabs
+        tabs={[
+          { id: 'catalog', label: module === 'water' ? 'Products' : 'Services' },
+          { id: 'extras', label: module === 'water' ? 'Delivery Pricing' : 'Add-ons' },
+        ]}
+        active={tab}
+        onChange={id => setTab(id as 'catalog' | 'extras')}
+      />
+
+      {tab === 'extras' ? (
+        module === 'water' ? <DeliveryPricingPanel /> : <AddonsPanel />
+      ) : (
+      <>
 
       <Card>
         <CardHeader>
@@ -195,10 +220,12 @@ export default function ProductCatalog({ module }: Props) {
           <Table maxHeight={520}>
             <Thead>
               <Tr>
-                <Th>Item</Th>
+                <Th>Item ID</Th>
+                <Th>Item Name</Th>
                 <Th>Category</Th>
                 <Th align="right">Price</Th>
-                <Th>Pricing</Th>
+                <Th>Pricing Type</Th>
+                <Th>Unit</Th>
                 <Th align="center">Status</Th>
                 <Th align="center">Actions</Th>
               </Tr>
@@ -206,9 +233,10 @@ export default function ProductCatalog({ module }: Props) {
             <Tbody>
               {filtered.map(p => (
                 <Tr key={p.id}>
+                  <Td className="num text-xs font-semibold text-blue-600">{p.id}</Td>
                   <Td>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {p.image ? (
                           <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                         ) : p.icon ? (
@@ -217,22 +245,20 @@ export default function ProductCatalog({ module }: Props) {
                           <ImageOff className="w-4 h-4 text-slate-300" />
                         )}
                       </div>
-                      <div>
-                        <p className="font-semibold text-slate-900 leading-tight">{p.name}</p>
-                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{p.id}</p>
-                      </div>
+                      <span className="font-semibold text-slate-900">{p.name}</span>
                     </div>
                   </Td>
                   <Td><Badge variant="gray">{p.category}</Badge></Td>
-                  <Td align="right" className="font-mono font-medium">{fmt.peso(p.price)}</Td>
-                  <Td className="text-xs text-slate-500">{PRICING_TYPE_LABELS[p.type]} · {p.unit}</Td>
+                  <Td align="right" className="num font-medium">{fmt.peso(p.price)}</Td>
+                  <Td className="text-xs text-slate-500">{PRICING_TYPE_LABELS[p.type]}</Td>
+                  <Td className="text-xs text-slate-500">{p.unit}</Td>
                   <Td align="center"><Badge variant={p.active ? 'active' : 'inactive'}>{p.active ? 'Active' : 'Inactive'}</Badge></Td>
                   <Td align="center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Button size="xs" variant="ghost" onClick={() => setViewProduct(p)} icon={<Eye className="w-4 h-4 text-slate-400" />} title="View" />
-                      <Button size="xs" variant="ghost" onClick={() => openEdit(p)} icon={<Edit className="w-4 h-4 text-slate-400" />} title="Edit" />
-                      <Button size="xs" variant="ghost" onClick={() => setDeleteTarget(p)} icon={<Trash2 className="w-4 h-4 text-red-400" />} title="Delete" />
-                    </div>
+                    <RowActions>
+                      <ViewAction onClick={() => setViewProduct(p)} />
+                      <EditAction onClick={() => openEdit(p)} />
+                      <DeleteAction onClick={() => setDeleteTarget(p)} />
+                    </RowActions>
                   </Td>
                 </Tr>
               ))}
@@ -240,6 +266,9 @@ export default function ProductCatalog({ module }: Props) {
           </Table>
         )}
       </Card>
+
+      </>
+      )}
 
       {/* Add / Edit Modal */}
       <Modal

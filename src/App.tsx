@@ -1,5 +1,5 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { ToastContainer } from './components/ui';
 import Layout, { type PageId } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -19,12 +19,8 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import ProfilePage from './pages/ProfilePage';
 
 function AppRoutes() {
-  const { auth, login } = useAuth();
+  const { auth, initializing } = useAuth();
   const navigate = useNavigate();
-  
-  const handleLogin = (role: 'admin' | 'staff', name: string) => {
-    login(role, name);
-  };
 
   const mapPageToPath = (page: PageId): string => {
     const map: Record<PageId, string> = {
@@ -49,9 +45,22 @@ function AppRoutes() {
     return <Component subPage={subPage} userName={auth.name} userRole={auth.role} onNavigate={(p: PageId) => navigate(mapPageToPath(p))} {...props} />;
   };
 
+  // Wait for the stored Supabase session before deciding where to send the user,
+  // otherwise a refresh on any page bounces to /login for a moment.
+  if (initializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="flex items-center gap-3 text-slate-500">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm font-medium">Loading ALMS…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Routes>
-      <Route path="/login" element={auth ? <Navigate to="/dashboard" replace /> : <LoginPage onLogin={handleLogin} />} />
+      <Route path="/login" element={auth ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />

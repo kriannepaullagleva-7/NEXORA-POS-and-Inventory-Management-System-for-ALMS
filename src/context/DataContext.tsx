@@ -1,13 +1,16 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { productService } from '../services/productService';
-import type { PosProduct, PosModule } from '../data/products';
-import { inventoryItems as inventoryItemsSeed, stockMovements as stockMovementsSeed } from '../data/inventory';
-import type { InventoryItem, StockMovement } from '../data/inventory';
+import { inventoryService, type StockInInput, type StockOutInput } from '../services/inventoryService';
+import { customerService } from '../services/customerService';
+import type { PosModule, PosProduct } from '../data/products';
+import type { Customer, InventoryItem, StockMovement, Supplier } from '../types/models';
+import { useAuth } from './AuthContext';
 
-// ─── Products context ──────────────────────────────────────────────────────
-// Everything here goes through `productService`. Swapping the in-memory
-// adapter for Supabase later touches only src/services/productService.ts —
-// this context, and every component that consumes it, stays unchanged.
+// Shared, cross-page state only. Page-local data (orders, sales, payments,
+// expenses, employees) is fetched by the pages themselves via `useAsync`,
+// so one module's refresh never re-renders the rest of the app.
+
+// ─── Products (POS catalog: water_products + laundry_services) ───────────────
 
 interface ProductsContextType {
   products: PosProduct[];
@@ -23,6 +26,7 @@ interface ProductsContextType {
 const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
 
 export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { auth } = useAuth();
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +35,7 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
     setLoading(true);
     setError(null);
     try {
-      const rows = await productService.list();
-      setProducts(rows);
+      setProducts(await productService.list());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load products.');
     } finally {
@@ -40,7 +43,13 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    if (auth) void refresh();
+    else {
+      setProducts([]);
+      setLoading(false);
+    }
+  }, [auth, refresh]);
 
   const createProduct = useCallback(async (input: Omit<PosProduct, 'id'>) => {
     const created = await productService.create(input);
@@ -75,76 +84,80 @@ export const useProducts = () => {
   return ctx;
 };
 
-// ─── Inventory context ─────────────────────────────────────────────────────
-// Holds supply stock levels + the stock movement audit trail so stock-in/out
-// recorded in one page (Inventory) is immediately visible in another
-// (Stock Movements, the notification bell) without a page refresh.
-
-interface StockInInput { supplierId: string; supplierName: string; poRef: string; ref: string; qty: number; unitCost: number; processedBy: string; reason?: string; }
-interface StockOutInput { reason: string; qty: number; ref: string; processedBy: string; }
+// ─── Inventory (stock levels + audit trail, shared with the navbar bell) ─────
 
 interface InventoryContextType {
   items: InventoryItem[];
   movements: StockMovement[];
+  suppliers: Supplier[];
   lowStockItems: InventoryItem[];
-  stockIn: (itemId: string, input: StockInInput) => void;
-  stockOut: (itemId: string, input: StockOutInput) => void;
+  loading: boolean;
+  error: string | null;
+  stockIn: (itemId: string, input: StockInInput) => Promise<void>;
+  stockOut: (itemId: string, input: StockOutInput) => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-let movementCounter = stockMovementsSeed.length;
-const nextMovementId = () => `SM-${String(++movementCounter).padStart(4, '0')}`;
-
 export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<InventoryItem[]>(inventoryItemsSeed);
-  const [movements, setMovements] = useState<StockMovement[]>(stockMovementsSeed);
+  const { auth } = useAuth();
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const stockIn = useCallback((itemId: string, input: StockInInput) => {
-    setItems(prev => {
-      const item = prev.find(i => i.id === itemId);
-      if (!item) return prev;
-      const newQty = item.currentQty + input.qty;
-      const status: InventoryItem['status'] = newQty <= 0 ? 'critical' : newQty <= item.reorderLevel ? 'low' : 'normal';
-      const id = nextMovementId();
-      const movement: StockMovement = {
-        id, date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        itemId, item: item.name, type: 'stock_in', qty: input.qty, unit: item.unit,
-        prevStock: item.currentQty, newStock: newQty,
-        supplierId: input.supplierId, supplierName: input.supplierName,
-        poRef: input.poRef, ref: input.poRef || input.ref || `ADJ-${id}`,
-        processedBy: input.processedBy, reason: input.reason || 'Purchase delivery',
-      };
-      setMovements(m => [movement, ...m]);
-      return prev.map(i => (i.id === itemId ? { ...i, currentQty: newQty, status } : i));
-    });
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [nextItems, nextMovements, nextSuppliers] = await Promise.all([
+        inventoryService.listItems(),
+        inventoryService.listMovements(),
+        inventoryService.listSuppliers(),
+      ]);
+      setItems(nextItems);
+      setMovements(nextMovements);
+      setSuppliers(nextSuppliers);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load inventory.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const stockOut = useCallback((itemId: string, input: StockOutInput) => {
-    setItems(prev => {
-      const item = prev.find(i => i.id === itemId);
-      if (!item) return prev;
-      const newQty = Math.max(0, item.currentQty - input.qty);
-      const status: InventoryItem['status'] = newQty <= 0 ? 'critical' : newQty <= item.reorderLevel ? 'low' : 'normal';
-      const id = nextMovementId();
-      const movement: StockMovement = {
-        id, date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        itemId, item: item.name, type: 'stock_out', qty: input.qty, unit: item.unit,
-        prevStock: item.currentQty, newStock: newQty,
-        supplierId: '', supplierName: '', poRef: '',
-        ref: input.ref || `ADJ-${id}`,
-        processedBy: input.processedBy, reason: input.reason,
-      };
-      setMovements(m => [movement, ...m]);
-      return prev.map(i => (i.id === itemId ? { ...i, currentQty: newQty, status } : i));
-    });
-  }, []);
+  useEffect(() => {
+    if (auth) void refresh();
+    else {
+      setItems([]);
+      setMovements([]);
+      setSuppliers([]);
+      setLoading(false);
+    }
+  }, [auth, refresh]);
+
+  const stockIn = useCallback(
+    async (itemId: string, input: StockInInput) => {
+      await inventoryService.stockIn(itemId, input);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const stockOut = useCallback(
+    async (itemId: string, input: StockOutInput) => {
+      await inventoryService.stockOut(itemId, input);
+      await refresh();
+    },
+    [refresh]
+  );
 
   const lowStockItems = useMemo(() => items.filter(i => i.status !== 'normal'), [items]);
 
   const value = useMemo<InventoryContextType>(
-    () => ({ items, movements, lowStockItems, stockIn, stockOut }),
-    [items, movements, lowStockItems, stockIn, stockOut]
+    () => ({ items, movements, suppliers, lowStockItems, loading, error, stockIn, stockOut, refresh }),
+    [items, movements, suppliers, lowStockItems, loading, error, stockIn, stockOut, refresh]
   );
 
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
@@ -156,8 +169,65 @@ export const useInventory = () => {
   return ctx;
 };
 
+// ─── Customers (shared by both POS screens) ──────────────────────────────────
+
+interface CustomersContextType {
+  customers: Customer[];
+  loading: boolean;
+  refresh: () => Promise<void>;
+  addCustomer: (input: Omit<Customer, 'id'>) => Promise<Customer>;
+}
+
+const CustomersContext = createContext<CustomersContextType | undefined>(undefined);
+
+export const CustomersProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { auth } = useAuth();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setCustomers(await customerService.list());
+    } catch {
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (auth) void refresh();
+    else {
+      setCustomers([]);
+      setLoading(false);
+    }
+  }, [auth, refresh]);
+
+  const addCustomer = useCallback(async (input: Omit<Customer, 'id'>) => {
+    const created = await customerService.create(input);
+    setCustomers(prev => [...prev, created]);
+    return created;
+  }, []);
+
+  const value = useMemo<CustomersContextType>(
+    () => ({ customers, loading, refresh, addCustomer }),
+    [customers, loading, refresh, addCustomer]
+  );
+
+  return <CustomersContext.Provider value={value}>{children}</CustomersContext.Provider>;
+};
+
+export const useCustomers = () => {
+  const ctx = useContext(CustomersContext);
+  if (!ctx) throw new Error('useCustomers must be used within a CustomersProvider');
+  return ctx;
+};
+
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => (
   <ProductsProvider>
-    <InventoryProvider>{children}</InventoryProvider>
+    <InventoryProvider>
+      <CustomersProvider>{children}</CustomersProvider>
+    </InventoryProvider>
   </ProductsProvider>
 );

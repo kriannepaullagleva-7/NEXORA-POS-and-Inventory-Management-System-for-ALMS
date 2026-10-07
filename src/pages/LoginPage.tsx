@@ -6,8 +6,9 @@ import {
 } from 'lucide-react';
 import loginBg from '../assets/login.png';
 import logo from '../assets/logo.png';
+import { useAuth } from '../context/AuthContext';
 
-const REMEMBER_KEY = 'alms_remember_username';
+const REMEMBER_KEY = 'alms_remember_email';
 
 const FEATURES = [
   { icon: ShoppingCart, title: 'Point-of-Sale', subtitle: 'Fast & Easy Transactions' },
@@ -16,11 +17,7 @@ const FEATURES = [
   { icon: BarChart3, title: 'Reports', subtitle: 'Sales, Inventory & Insights' },
 ];
 
-interface LoginPageProps {
-  onLogin: (role: 'admin' | 'staff', name: string) => void;
-}
-
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage() {
   const [username, setUsername] = useState(() => {
     try { return localStorage.getItem(REMEMBER_KEY) || ''; } catch { return ''; }
   });
@@ -31,6 +28,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const toast = useToast();
+  const { signIn } = useAuth();
 
   const persistRemember = () => {
     try {
@@ -43,19 +41,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     e.preventDefault();
     if (!username || !password) { toast.error('Please enter your credentials.'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600)); // slightly faster
-    if (username === 'admin' && password === 'admin') {
+    try {
+      await signIn(username, password);
       persistRemember();
-      toast.success('Welcome back, Administrator!');
-      onLogin('admin', 'Aedzel Louis M. Sarmiento');
-    } else if (username === 'staff' && password === 'staff') {
-      persistRemember();
-      toast.success('Welcome, Cashier!');
-      onLogin('staff', 'Maria Santos');
-    } else {
-      toast.error('Invalid username or password.');
+      toast.success('Signed in successfully.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to sign in.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleForgotPassword = (e: React.MouseEvent) => {
@@ -73,13 +67,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-slate-900/70 to-blue-950/60 pointer-events-none" />
 
         <div className="relative z-10 max-w-xl">
-          <div className="flex items-center gap-3 mb-5 xl:mb-7">
-            <div className="w-10 h-10 xl:w-11 xl:h-11 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg flex-shrink-0">
-              <Droplet className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="text-white font-bold text-lg tracking-tight leading-none">ALMS</div>
-              <div className="text-blue-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-0.5">System</div>
+          <div className="relative z-10 max-w-xl">
+            <div className="flex items-center gap-3 mb-5 xl:mb-7">
+              <div className="w-12 h-12 xl:w-14 xl:h-12 rounded bg-blue-600 flex items-center justify-center shadow-lg flex-shrink-0">
+                <img
+                  src={logo}
+                  alt="ALMS Logo"
+                  className="w-8 h-10 xl:w-16 xl:h-14 object-contain"
+                />
+              </div>
+
+              <div>
+                <div className="text-white font-bold text-lg tracking-tight leading-none">
+                  ALMS POINT OF SALE &
+                </div>
+                <div className="text-blue-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-0.5">
+                  INVENTORY MANAGEMENT SYSTEM
+                </div>
+              </div>
             </div>
           </div>
 
@@ -92,7 +97,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             Alkaline • Purified • Mineral
           </p>
           <p className="text-slate-300 text-sm leading-relaxed max-w-md mb-4 xl:mb-7">
-            A modern Point-of-Sale and management system designed to make daily operations faster, easier, and more organized.
+            A modern Point-of-Sale and Inventory Management System designed to make daily operations faster, easier, and more organized.
           </p>
 
           <div className="hidden xl:grid grid-cols-4 gap-3 mb-8">
@@ -132,7 +137,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
         </div>
 
-        <p className="relative z-10 text-[11px] text-slate-500 font-medium tracking-wide mt-6 xl:mt-8">
+        <p className="relative z-10 text-center text-[11px] text-slate-500 font-medium tracking-wide mt-6 xl:mt-8">
           Powered by <span className="text-slate-300 font-bold tracking-widest">NEXORA</span>
         </p>
       </div>
@@ -143,46 +148,57 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <div className="flex items-center gap-3 mb-6">
             <img src={logo} alt="ALMS logo" className="w-10 h-10 rounded-lg object-cover shadow-sm ring-1 ring-slate-200 flex-shrink-0" />
             <div>
-              <div className="text-slate-900 font-bold text-sm tracking-tight leading-none">ALMS</div>
-              <div className="text-blue-600 text-[10px] font-bold uppercase tracking-wider mt-0.5">Laundry &amp; Water Refilling</div>
+              <div className="text-slate-900 font-bold text-sm tracking-tight leading-none">ALMS POINT OF SALE &amp;</div>
+              <div className="text-blue-600 text-[10px] font-bold uppercase tracking-wider mt-0.5">INVENTORY MANAGEMENT SYSTEM</div>
             </div>
           </div>
 
           <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-2">Welcome Back</p>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">System Login</h2>
           <p className="text-slate-500 text-sm mb-7 font-medium">
-            Enter your credentials to access the POS and management portal.
+            Enter your credentials to access the POS and Inventory Management System.
           </p>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
-              label="Username"
-              type="text"
-              placeholder="Enter your username"
+              label="Email"
+              type="email"
+              autoComplete="username"
+              placeholder="Enter your email"
               value={username}
               onChange={e => setUsername(e.target.value)}
               icon={<User className="w-4 h-4" />}
             />
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700">Password</label>
+              <label className="text-sm font-medium text-slate-700">
+                Password
+              </label>
+
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                {/* Lock icon — aligned with Username icon */}
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <Lock className="w-4 h-4" />
                 </span>
+
                 <input
                   type={showPass ? 'text' : 'password'}
-                  className="w-full pl-10 pr-10 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                  className="w-full pl-10 pr-10 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
                   placeholder="Enter your password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                 />
+
                 <button
                   type="button"
                   onClick={() => setShowPass(p => !p)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPass ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>

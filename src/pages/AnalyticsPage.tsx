@@ -1,54 +1,90 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Legend, PieChart, Pie, Cell, AreaChart, Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area
 } from 'recharts';
 import {
-  PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, KpiCard, StatRow, ChartTooltip,
+  PageHeader,
+  Card,
+  CardHeader,
+  CardBody,
+  Button,
+  Table,
+  Thead,
+  Tbody,
+  Th,
+  Td,
+  Tr,
+  KpiCard,
+  StatRow,
+  ChartTooltip
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { monthlyRevenue, dailyRevenue } from '../data/finance';
-import { laundryOrders } from '../data/laundry';
-import { waterSales } from '../data/water';
-import { inventoryItems } from '../data/inventory';
-import { payments } from '../data/payments';
-import { 
-  TrendingUp, Activity, BarChart2, Droplet, 
-  Waves, Package, FileText, Banknote, ShieldAlert,
-  Wallet, Printer, Download, ShoppingCart, Percent
+import { useAsync } from '../hooks/useAsync';
+import { reportService, type Period, type PeriodSummary } from '../services/reportService';
+import { useInventory } from '../context/DataContext';
+import {
+  TrendingUp,
+  Droplet,
+  Waves,
+  Package,
+  FileText,
+  Banknote,
+  ShieldAlert,
+  Wallet,
+  Printer,
+  Download,
+  ShoppingCart,
+  Percent
 } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444'];
 
-const servicePerformance = [
-  { name: 'Wash, Dry & Fold', orders: 45, revenue: 5400, avgOrder: 120 },
-  { name: 'Full Service W&D', orders: 38, revenue: 3230, avgOrder: 85 },
-  { name: 'Bedsheets/Blankets', orders: 22, revenue: 3300, avgOrder: 150 },
-  { name: 'Self-Service Wash', orders: 60, revenue: 3300, avgOrder: 55 },
-  { name: 'Comforter/Duvet', orders: 15, revenue: 5250, avgOrder: 350 },
-  { name: 'Sneakers', orders: 18, revenue: 4500, avgOrder: 250 },
-];
-
-const waterPerformance = [
-  { name: '20L Gallon', qty: 280, revenue: 18200 },
-  { name: '10L Gallon', qty: 120, revenue: 4800 },
-  { name: '5L Gallon', qty: 180, revenue: 4500 },
-  { name: '2.5L Slim', qty: 90, revenue: 1620 },
-];
-
 export default function AnalyticsPage() {
   const [reportType, setReportType] = useState('overview');
-  const [dateRange, setDateRange] = useState('monthly');
+  const [dateRange, setDateRange] = useState<Period>('monthly');
 
-  const totalRevenue = monthlyRevenue.reduce((s, m) => s + m.laundry + m.water, 0);
-  const laundryRev = monthlyRevenue.reduce((s, m) => s + m.laundry, 0);
-  const waterRev = monthlyRevenue.reduce((s, m) => s + m.water, 0);
-  const totalTxns = laundryOrders.length + waterSales.length;
+  // Everything below is read from the database for the selected window, so the
+  // Today / Week / Month / Year filter changes every figure on the page.
+  const { data: summary, loading: summaryLoading } = useAsync<PeriodSummary>(
+    () => reportService.summary(dateRange),
+    {
+      label: '', from: '', to: '',
+      laundryRevenue: 0, waterRevenue: 0, totalRevenue: 0,
+      laundryCount: 0, waterCount: 0, totalTransactions: 0,
+      cash: 0, gcash: 0, expenses: 0, netRevenue: 0, averageTicket: 0, outstanding: 0,
+    },
+    [dateRange]
+  );
+
+  const { data: topSellers } = useAsync(
+    () => reportService.topSellersFor(dateRange),
+    { services: [], products: [] },
+    [dateRange]
+  );
+
+  const { data: monthlyRevenue } = useAsync(() => reportService.monthlyRevenue(), []);
+  const { data: dailyRevenue } = useAsync(() => reportService.dailyRevenue(), []);
+  const { items: inventoryItems } = useInventory();
+
+  const totalRevenue = summary.totalRevenue;
+  const laundryRev = summary.laundryRevenue;
+  const waterRev = summary.waterRevenue;
+  const totalTxns = summary.totalTransactions;
   const lowStock = inventoryItems.filter(i => i.status !== 'normal').length;
   const inventoryValue = inventoryItems.reduce((s, i) => s + i.currentQty * i.costPerUnit, 0);
-  const estExpenses = totalRevenue * 0.55;
-  const netRevenue = totalRevenue - estExpenses;
+  const netRevenue = summary.netRevenue;
 
   const revenueByService = [
     { name: 'Laundry', value: laundryRev },
@@ -56,8 +92,8 @@ export default function AnalyticsPage() {
   ];
 
   const paymentMix = [
-    { name: 'Cash', value: payments.filter(p=>p.method==='cash').reduce((s,p)=>s+p.amount,0) },
-    { name: 'GCash', value: payments.filter(p=>p.method==='gcash').reduce((s,p)=>s+p.amount,0) },
+    { name: 'Cash', value: summary.cash },
+    { name: 'GCash', value: summary.gcash },
   ];
 
   const reports = [
@@ -70,11 +106,11 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Business Intelligence" subtitle="Analytics, comprehensive reports, and performance insights"
+      <PageHeader title="Business Intelligence" subtitle={summaryLoading ? 'Loading…' : `${summary.label} · ${summary.from} to ${summary.to}`}
         actions={
           <div className="flex gap-2">
             <select className="px-3 py-2 text-sm font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 outline-none focus:border-blue-500 shadow-sm transition-all"
-              value={dateRange} onChange={e => setDateRange(e.target.value)}>
+              value={dateRange} onChange={e => setDateRange(e.target.value as Period)}>
               <option value="daily">Today</option>
               <option value="weekly">This Week</option>
               <option value="monthly">This Month</option>
@@ -97,21 +133,21 @@ export default function AnalyticsPage() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-        <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} mono trend={{ value: '+8.2%', up: true }}
+        <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} trend={{ value: '+8.2%', up: true }}
           icon={<TrendingUp className="w-5 h-5 text-green-600" />} />
-        <KpiCard title="Laundry Revenue" value={fmt.peso(laundryRev)} mono trend={{ value: '+5.4%', up: true }}
+        <KpiCard title="Laundry Revenue" value={fmt.peso(laundryRev)} trend={{ value: '+5.4%', up: true }}
           icon={<Waves className="w-5 h-5 text-slate-500" />} />
-        <KpiCard title="Water Revenue" value={fmt.peso(waterRev)} mono trend={{ value: '+11.2%', up: true }}
+        <KpiCard title="Water Revenue" value={fmt.peso(waterRev)} trend={{ value: '+11.2%', up: true }}
           icon={<Droplet className="w-5 h-5 text-slate-500" />} />
-        <KpiCard title="Net Profit Margin" value={`${(netRevenue/totalRevenue*100).toFixed(0)}%`} mono trend={{ value: 'Above target', up: true }}
+        <KpiCard title="Net Profit Margin" value={`${(netRevenue/totalRevenue*100).toFixed(0)}%`} trend={{ value: 'Above target', up: true }}
           icon={<Percent className="w-5 h-5 text-slate-400" />} />
         <KpiCard title="Total Transactions" value={totalTxns} 
           icon={<ShoppingCart className="w-5 h-5 text-slate-400" />} />
-        <KpiCard title="Laundry Orders" value={laundryOrders.length} 
+        <KpiCard title="Laundry Orders" value={summary.laundryCount} 
           icon={<FileText className="w-5 h-5 text-slate-400" />} />
         <KpiCard title="Low Stock Alerts" value={lowStock} 
           icon={<ShieldAlert className={`w-5 h-5 ${lowStock > 0 ? 'text-red-500' : 'text-slate-400'}`} />} />
-        <KpiCard title="Inventory Value" value={fmt.peso(inventoryValue)} mono 
+        <KpiCard title="Inventory Value" value={fmt.peso(inventoryValue)} 
           icon={<Package className="w-5 h-5 text-slate-400" />} />
       </div>
 
@@ -226,9 +262,9 @@ export default function AnalyticsPage() {
             <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Payment Summary</p>
               <div className="space-y-2">
-                <StatRow label="Total Transactions" value={payments.length.toString()} />
-                <StatRow label="Total Collected" value={fmt.peso(payments.reduce((s,p)=>s+p.amount,0))} mono />
-                <StatRow label="Avg. Ticket Size" value={fmt.peso(payments.reduce((s,p)=>s+p.amount,0)/payments.length)} mono />
+                <StatRow label="Total Transactions" value={summary.totalTransactions.toString()} />
+                <StatRow label="Total Collected" value={fmt.peso(summary.cash + summary.gcash)} mono />
+                <StatRow label="Avg. Ticket Size" value={fmt.peso(summary.averageTicket)} mono />
               </div>
             </div>
           </CardBody>
@@ -254,8 +290,10 @@ export default function AnalyticsPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {servicePerformance.sort((a,b)=>b.revenue-a.revenue).map((svc, i) => {
-              const totalServiceRev = servicePerformance.reduce((s,s2)=>s+s2.revenue,0);
+            {topSellers.services.length === 0 ? (
+              <Tr><Td colSpan={5} align="center"><span className="text-slate-500 py-6 block">No laundry sales recorded yet.</span></Td></Tr>
+            ) : topSellers.services.map((svc, i) => {
+              const totalServiceRev = topSellers.services.reduce((s, s2) => s + s2.revenue, 0) || 1;
               const share = (svc.revenue/totalServiceRev*100).toFixed(0);
               return (
                 <Tr key={svc.name}>
@@ -265,9 +303,9 @@ export default function AnalyticsPage() {
                       <span className="font-bold text-slate-800">{svc.name}</span>
                     </div>
                   </Td>
-                  <Td align="center" className="font-mono text-slate-600 font-medium">{svc.orders}</Td>
+                  <Td align="center" className="font-mono text-slate-600 font-medium">{svc.qty}</Td>
                   <Td align="right" className="font-mono font-bold text-green-700">{fmt.peso(svc.revenue)}</Td>
-                  <Td align="right" className="font-mono text-slate-700 font-medium">{fmt.peso(svc.avgOrder)}</Td>
+                  <Td align="right" className="font-mono text-slate-700 font-medium">{fmt.peso(svc.qty ? svc.revenue / svc.qty : 0)}</Td>
                   <Td>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -298,8 +336,10 @@ export default function AnalyticsPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {waterPerformance.sort((a,b)=>b.revenue-a.revenue).map((prod, i) => {
-              const total = waterPerformance.reduce((s,p)=>s+p.revenue,0);
+            {topSellers.products.length === 0 ? (
+              <Tr><Td colSpan={4} align="center"><span className="text-slate-500 py-6 block">No water sales recorded yet.</span></Td></Tr>
+            ) : topSellers.products.map((prod, i) => {
+              const total = topSellers.products.reduce((s, p) => s + p.revenue, 0) || 1;
               const share = (prod.revenue/total*100).toFixed(0);
               return (
                 <Tr key={prod.name}>

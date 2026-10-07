@@ -1,17 +1,37 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { today } from '../services/helpers';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
   Table, Thead, Tbody, Th, Td, Tr, Modal, ExportDialog, Confirm, Input, Select, Textarea,
-  SearchBar, useToast, KpiCard, StatRow
+  SearchBar, useToast, KpiCard, StatRow, RowActions, ViewAction, EditAction, DeleteAction
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
+import { matchesQuery } from '../utils/search';
+import type { StockMovement, Supplier } from '../types/models';
 import { exportReportPdf } from '../utils/pdf';
-import { inventoryProducts, suppliers, purchaseOrders } from '../data/inventory';
+import { useAsync } from '../hooks/useAsync';
+import { inventoryService } from '../services/inventoryService';
+import { activityService } from '../services/activityService';
 import { useInventory } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import {
-  Package, Boxes, TrendingDown, ArrowDownRight, ArrowUpRight,
-  ShoppingCart, FileText, Plus, Store, Download, FilePlus, Eye,
-  Search, AlertCircle, Edit, Trash2, CheckCircle2, Banknote, Smartphone, MapPin
+  Package,
+  Boxes,
+  ArrowDownRight,
+  ArrowUpRight,
+  ShoppingCart,
+  XCircle,
+  FileText,
+  Plus,
+  Store,
+  Download,
+  FilePlus,
+  AlertCircle,
+  Edit,
+  CheckCircle2,
+  Banknote,
+  Smartphone,
+  MapPin
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -27,12 +47,43 @@ export default function InventoryPage({ subPage, userName }: Props) {
 }
 
 function ProductsPage() {
-  const [products] = useState(inventoryProducts);
+  const { items: products, loading, error, refresh } = useInventory();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', category: '', unit: '', unitPrice: '' });
   const toast = useToast();
+
+  const handleAdd = async () => {
+    if (!form.name.trim()) { toast.error('Product name is required.'); return; }
+    if (!form.category) { toast.error('Select a category.'); return; }
+    const price = parseFloat(form.unitPrice);
+    if (!form.unitPrice || isNaN(price) || price <= 0) { toast.error('Enter a valid unit price.'); return; }
+
+    setSaving(true);
+    try {
+      await inventoryService.createItem({
+        name: form.name.trim(),
+        category: form.category,
+        unit: form.unit.trim() || 'pcs',
+        unitPrice: price,
+        costPerUnit: price,
+        currentQty: 0,
+        reorderLevel: 0,
+        supplier: '',
+        description: '',
+      });
+      toast.success('Product added.');
+      setShowAdd(false);
+      setForm({ name: '', category: '', unit: '', unitPrice: '' });
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not add the product.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
   const filtered = products.filter(p =>
@@ -72,7 +123,13 @@ function ProductsPage() {
               </Tr>
             </Thead>
             <Tbody>
-              {filtered.map(p => (
+              {loading ? (
+                <Tr><Td colSpan={6} align="center"><span className="text-slate-500 py-6 block">Loading products…</span></Td></Tr>
+              ) : error ? (
+                <Tr><Td colSpan={6} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+              ) : filtered.length === 0 ? (
+                <Tr><Td colSpan={6} align="center"><span className="text-slate-500 py-6 block">No products found.</span></Td></Tr>
+              ) : filtered.map(p => (
                 <Tr key={p.id}>
                   <Td className="font-mono text-[10px] text-slate-500">{p.id}</Td>
                   <Td className="font-semibold text-slate-900">{p.name}</Td>
@@ -89,7 +146,7 @@ function ProductsPage() {
       </Card>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Product" size="md"
-        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Product added.'); setShowAdd(false); }}>Save Product</Button></>}>
+        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" loading={saving} onClick={handleAdd}>Save Product</Button></>}>
         <div className="space-y-4">
           <Input label="Product Name *" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Ariel Detergent" />
           <div className="grid grid-cols-2 gap-4">
@@ -97,6 +154,7 @@ function ProductsPage() {
               options={[{value:'',label:'Select...'},{value:'Laundry',label:'Laundry'},{value:'Water',label:'Water'},{value:'Accessories',label:'Accessories'},{value:'Office',label:'Office'},{value:'Packaging',label:'Packaging'}]} />
             <Input label="Unit Price (₱) *" type="number" value={form.unitPrice} onChange={e => setForm(p=>({...p,unitPrice:e.target.value}))} placeholder="0.00" />
           </div>
+          <Input label="Unit of Measurement" value={form.unit} onChange={e => setForm(p=>({...p,unit:e.target.value}))} placeholder="e.g. kg, bottle, pcs" />
         </div>
       </Modal>
     </div>
@@ -104,7 +162,9 @@ function ProductsPage() {
 }
 
 function InventoryItemsPage({ userName }: { userName: string }) {
-  const { items, stockIn, stockOut } = useInventory();
+  const { items, suppliers, stockIn, stockOut, loading, error } = useInventory();
+  const { employee } = useAuth();
+  const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
@@ -120,7 +180,7 @@ function InventoryItemsPage({ userName }: { userName: string }) {
   const [siQty, setSiQty] = useState('');
   const [siUnitCost, setSiUnitCost] = useState('');
   const [siRef, setSiRef] = useState('');
-  const [siDate, setSiDate] = useState(new Date().toISOString().slice(0, 10));
+  const [siDate, setSiDate] = useState(today());
   const [siNotes, setSiNotes] = useState('');
 
   // Stock-Out form
@@ -140,29 +200,47 @@ function InventoryItemsPage({ userName }: { userName: string }) {
   const lowCount = items.filter(i => i.status !== 'normal').length;
   const totalValue = items.reduce((s, i) => s + i.currentQty * i.costPerUnit, 0);
 
-  const handleStockIn = () => {
+  const handleStockIn = async () => {
     if (!siSupplier) { toast.error('Supplier is required for stock-in.'); return; }
     if (!siQty || isNaN(parseFloat(siQty)) || parseFloat(siQty) <= 0) { toast.error('Enter a valid quantity.'); return; }
     if (!siUnitCost || isNaN(parseFloat(siUnitCost))) { toast.error('Enter unit cost.'); return; }
     const qty = parseFloat(siQty);
     const supplier = suppliers.find(s => s.id === siSupplier);
-    stockIn(showStockIn.id, {
-      supplierId: siSupplier, supplierName: supplier?.name || siSupplier,
-      poRef: siPORef, ref: siRef, qty, unitCost: parseFloat(siUnitCost),
-      processedBy: userName, reason: siNotes || undefined,
-    });
-    toast.success(`Stock-in recorded: +${qty} ${showStockIn.unit} for ${showStockIn.name}.`);
-    setShowStockIn(null); setSiSupplier(''); setSiPORef(''); setSiQty(''); setSiUnitCost(''); setSiRef(''); setSiNotes('');
+
+    setBusy(true);
+    try {
+      await stockIn(showStockIn.id, {
+        supplierId: siSupplier, supplierName: supplier?.name || siSupplier,
+        poRef: siPORef, ref: siRef, qty, unitCost: parseFloat(siUnitCost),
+        processedBy: userName, reason: siNotes || undefined,
+      });
+      await activityService.log(employee?.id ?? null, 'Inventory', `Stock-in +${qty} ${showStockIn.unit} for ${showStockIn.name}`);
+      toast.success(`Stock-in recorded: +${qty} ${showStockIn.unit} for ${showStockIn.name}.`);
+      setShowStockIn(null); setSiSupplier(''); setSiPORef(''); setSiQty(''); setSiUnitCost(''); setSiRef(''); setSiNotes('');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not record the stock-in.');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleStockOut = () => {
+  const handleStockOut = async () => {
     if (!soReason) { toast.error('Select a reason for stock-out.'); return; }
     if (!soQty || isNaN(parseFloat(soQty)) || parseFloat(soQty) <= 0) { toast.error('Enter a valid quantity.'); return; }
     const qty = parseFloat(soQty);
     if (qty > showStockOut.currentQty) { toast.error('Cannot remove more than current stock.'); return; }
-    stockOut(showStockOut.id, { reason: soReason, qty, ref: soRef, processedBy: userName });
-    toast.success(`Stock-out recorded: −${qty} ${showStockOut.unit} for ${showStockOut.name} (${soReason}).`);
-    setShowStockOut(null); setSoReason(''); setSoQty(''); setSoRef(''); setSoNotes('');
+
+    setBusy(true);
+    try {
+      await stockOut(showStockOut.id, { reason: soReason, qty, ref: soRef, processedBy: userName });
+      await activityService.log(employee?.id ?? null, 'Inventory', `Stock-out −${qty} ${showStockOut.unit} for ${showStockOut.name} (${soReason})`);
+      toast.success(`Stock-out recorded: −${qty} ${showStockOut.unit} for ${showStockOut.name} (${soReason}).`);
+      setShowStockOut(null); setSoReason(''); setSoQty(''); setSoRef(''); setSoNotes('');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not record the stock-out.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -208,7 +286,11 @@ function InventoryItemsPage({ userName }: { userName: string }) {
             </Tr>
           </Thead>
           <Tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <Tr><Td colSpan={8} align="center"><span className="text-slate-500 py-6 block">Loading stock…</span></Td></Tr>
+            ) : error ? (
+              <Tr><Td colSpan={8} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+            ) : filtered.length === 0 ? (
               <Tr><Td colSpan={8} align="center"><span className="text-slate-500 py-6 block">No items match your filter</span></Td></Tr>
             ) : filtered.map(item => (
               <Tr key={item.id} onClick={() => setViewItem(item)}>
@@ -267,7 +349,7 @@ function InventoryItemsPage({ userName }: { userName: string }) {
       {/* Stock-In Modal */}
       {showStockIn && (
         <Modal open={!!showStockIn} onClose={() => setShowStockIn(null)} title="Record Stock In" size="md"
-          footer={<><Button variant="ghost" onClick={() => setShowStockIn(null)}>Cancel</Button><Button variant="primary" onClick={handleStockIn}>Confirm Stock In</Button></>}>
+          footer={<><Button variant="ghost" onClick={() => setShowStockIn(null)}>Cancel</Button><Button variant="primary" loading={busy} onClick={handleStockIn}>Confirm Stock In</Button></>}>
           <div className="space-y-4">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
               <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-green-600"><ArrowUpRight className="w-5 h-5" /></div>
@@ -304,7 +386,7 @@ function InventoryItemsPage({ userName }: { userName: string }) {
       {/* Stock-Out Modal */}
       {showStockOut && (
         <Modal open={!!showStockOut} onClose={() => setShowStockOut(null)} title="Record Stock Out" size="md"
-          footer={<><Button variant="ghost" onClick={() => setShowStockOut(null)}>Cancel</Button><Button variant="danger" onClick={handleStockOut}>Confirm Stock Out</Button></>}>
+          footer={<><Button variant="ghost" onClick={() => setShowStockOut(null)}>Cancel</Button><Button variant="danger" loading={busy} onClick={handleStockOut}>Confirm Stock Out</Button></>}>
           <div className="space-y-4">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
               <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center text-red-600"><ArrowDownRight className="w-5 h-5" /></div>
@@ -371,13 +453,12 @@ function StockMovementsPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [showExport, setShowExport] = useState(false);
+  const [viewMovement, setViewMovement] = useState<StockMovement | null>(null);
   const toast = useToast();
 
   const filtered = movements.filter(m =>
     (typeFilter === 'all' || m.type === typeFilter) &&
-    (m.item.toLowerCase().includes(search.toLowerCase()) ||
-    m.ref.toLowerCase().includes(search.toLowerCase()) ||
-    m.processedBy.toLowerCase().includes(search.toLowerCase()))
+    matchesQuery(search, m.id, m.item, m.itemId, m.ref, m.poRef, m.processedBy, m.reason, m.supplierName, m.qty, m.unit, m.date)
   );
 
   const handleExport = () => {
@@ -403,7 +484,7 @@ function StockMovementsPage() {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <SearchBar value={search} onChange={setSearch} placeholder="Search by item, reference, or user…" className="w-full sm:w-80" />
+            <SearchBar value={search} onChange={setSearch} placeholder="Search item, reference, reason, supplier, user…" className="w-full sm:w-80" />
             <div className="flex gap-2">
               {[['all','All Records'], ['stock_in','Stock In'], ['stock_out','Stock Out']].map(([v, l]) => (
                 <button key={v} onClick={() => setTypeFilter(v)}
@@ -423,16 +504,17 @@ function StockMovementsPage() {
               <Th>Type</Th>
               <Th align="right">Qty Change</Th>
               <Th align="right">Balance</Th>
-              <Th>Source / Reason</Th>
-              <Th>References</Th>
+              <Th>Reason</Th>
+              <Th>Reference</Th>
               <Th>Processed By</Th>
+              <Th align="center">Actions</Th>
             </Tr>
           </Thead>
           <Tbody>
             {filtered.map(m => (
               <Tr key={m.id}>
-                <Td className="font-mono text-[10px] text-slate-400">{m.id}</Td>
-                <Td className="font-mono text-xs text-slate-600">{m.date}</Td>
+                <Td className="num text-[10px] text-slate-400">{m.id}</Td>
+                <Td className="num text-xs text-slate-600">{fmt.datetime(m.date)}</Td>
                 <Td>
                   <p className="font-medium text-slate-900 max-w-[200px] truncate">{m.item}</p>
                 </Td>
@@ -449,25 +531,40 @@ function StockMovementsPage() {
                   <span className="font-mono text-[10px] text-slate-400">{m.prevStock} → </span>
                   <span className="font-mono font-bold text-slate-800">{m.newStock}</span>
                 </Td>
-                <Td>
-                  {m.type === 'stock_in' ? (
-                    <span className="text-sm font-medium text-blue-700">{m.supplierName}</span>
-                  ) : (
-                    <span className="text-sm font-medium text-amber-700">{m.reason}</span>
-                  )}
-                </Td>
-                <Td>
-                  <div className="flex flex-col gap-0.5">
-                    {m.poRef && <span className="text-[10px] font-mono text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 self-start">PO: {m.poRef}</span>}
-                    {m.ref && <span className="text-[10px] font-mono text-slate-500">{m.ref}</span>}
-                  </div>
-                </Td>
+                <Td className="text-sm text-slate-700">{m.reason || '—'}</Td>
+                <Td className="num text-xs text-slate-600">{m.ref || m.poRef || '—'}</Td>
                 <Td className="text-xs font-medium text-slate-600">{m.processedBy}</Td>
+                <Td align="center">
+                  <RowActions>
+                    <ViewAction onClick={() => setViewMovement(m)} />
+                  </RowActions>
+                </Td>
               </Tr>
             ))}
           </Tbody>
         </Table>
       </Card>
+
+      {viewMovement && (
+        <Modal open={!!viewMovement} onClose={() => setViewMovement(null)} title="Stock Movement Details" size="md"
+          footer={<Button variant="ghost" onClick={() => setViewMovement(null)}>Close</Button>}>
+          <div className="space-y-3">
+            <StatRow label="Log ID" value={viewMovement.id} mono />
+            <StatRow label="Date & Time" value={fmt.datetime(viewMovement.date)} mono />
+            <StatRow label="Item" value={viewMovement.item} />
+            <StatRow label="Item Code" value={viewMovement.itemId} mono />
+            <StatRow label="Movement" value={viewMovement.type === 'stock_in' ? 'Stock In' : 'Stock Out'} />
+            <StatRow label="Quantity" value={`${viewMovement.type === 'stock_in' ? '+' : '−'}${viewMovement.qty} ${viewMovement.unit}`} mono />
+            <StatRow label="Stock Before" value={viewMovement.prevStock} mono />
+            <StatRow label="Stock After" value={viewMovement.newStock} mono />
+            <StatRow label="Reason" value={viewMovement.reason || '—'} />
+            <StatRow label="Reference" value={viewMovement.ref || '—'} mono />
+            <StatRow label="PO Reference" value={viewMovement.poRef || '—'} mono />
+            <StatRow label="Supplier" value={viewMovement.supplierName || '—'} />
+            <StatRow label="Processed By" value={viewMovement.processedBy || '—'} />
+          </div>
+        </Modal>
+      )}
 
       <ExportDialog
         open={showExport}
@@ -482,16 +579,118 @@ function StockMovementsPage() {
   );
 }
 
+const emptySupplierForm = { name: '', contactPerson: '', phone: '', email: '', address: '', category: '' };
+
 function SuppliersPage() {
+  const { suppliers, loading, refresh } = useInventory();
   const [showAdd, setShowAdd] = useState(false);
+  const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
+  const [deleteSupplier, setDeleteSupplier] = useState<Supplier | null>(null);
+  const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(emptySupplierForm);
   const toast = useToast();
+
+  const filtered = suppliers.filter(sup =>
+    matchesQuery(search, sup.id, sup.name, sup.contactPerson, sup.phone, sup.email, sup.address, sup.category, sup.status)
+  );
+
+  const openEdit = (sup: Supplier) => {
+    setForm({
+      name: sup.name, contactPerson: sup.contactPerson, phone: sup.phone,
+      email: sup.email, address: sup.address, category: sup.category,
+    });
+    setEditSupplier(sup);
+  };
+
+  const saveEdit = async () => {
+    if (!editSupplier) return;
+    if (!form.name.trim()) { toast.error('Supplier name is required.'); return; }
+    setSaving(true);
+    try {
+      await inventoryService.updateSupplier(editSupplier.id, {
+        name: form.name.trim(),
+        contactPerson: form.contactPerson.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        address: form.address.trim(),
+        category: form.category,
+      });
+      toast.success('Supplier updated successfully.');
+      setEditSupplier(null);
+      setForm(emptySupplierForm);
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the supplier.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeSupplier = async () => {
+    if (!deleteSupplier) return;
+    try {
+      const outcome = await inventoryService.deleteSupplier(deleteSupplier.id);
+      toast.success(
+        outcome === 'deleted'
+          ? `${deleteSupplier.name} deleted.`
+          : `${deleteSupplier.name} is used by existing records, so it was deactivated instead.`
+      );
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete the supplier.');
+    } finally {
+      setDeleteSupplier(null);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!form.name.trim()) { toast.error('Supplier name is required.'); return; }
+    setSaving(true);
+    try {
+      await inventoryService.createSupplier({
+        name: form.name.trim(),
+        contactPerson: form.contactPerson.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        address: form.address.trim(),
+        category: form.category,
+      });
+      toast.success('Supplier added successfully.');
+      setShowAdd(false);
+      setForm({ name: '', contactPerson: '', phone: '', email: '', address: '', category: '' });
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not add the supplier.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Suppliers Directory" subtitle="Manage vendor and distributor contacts"
         actions={<Button onClick={() => setShowAdd(true)} icon={<Plus className="w-4 h-4" />}>Add Supplier</Button>} />
-        
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <SearchBar value={search} onChange={setSearch} placeholder="Search name, contact, phone, email, category…" className="w-full sm:w-96" />
+            <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} suppliers</span>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {loading && <Card><CardBody className="py-10 text-center text-sm text-slate-500">Loading suppliers…</CardBody></Card>}
+      {!loading && filtered.length === 0 && (
+        <Card><CardBody className="py-10 text-center text-sm text-slate-500">
+          {suppliers.length === 0 ? 'No suppliers yet. Add your first supplier to get started.' : 'No suppliers match your search.'}
+        </CardBody></Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {suppliers.map(sup => (
+        {filtered.map(sup => (
           <Card key={sup.id} className="hover:shadow-md transition-shadow">
             <CardBody className="p-5">
               <div className="flex items-start justify-between mb-4">
@@ -514,7 +713,7 @@ function SuppliersPage() {
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
                   <div className="w-6 flex justify-center"><Smartphone className="w-4 h-4 text-slate-400" /></div>
-                  <span className="font-mono">{sup.phone}</span>
+                  <span className="num">{sup.phone}</span>
                 </div>
                 <div className="flex items-start gap-2 text-slate-600">
                   <div className="w-6 flex justify-center mt-0.5"><MapPin className="w-4 h-4 text-slate-400" /></div>
@@ -522,9 +721,13 @@ function SuppliersPage() {
                 </div>
               </div>
               
-              <div className="mt-5 pt-4 border-t border-slate-100 flex gap-2">
-                <Button size="xs" variant="outline" className="flex-1 justify-center text-slate-600 border-slate-200" icon={<Edit className="w-3.5 h-3.5"/>}>Edit</Button>
-                <Button size="xs" variant="primary" className="flex-1 justify-center" icon={<FilePlus className="w-3.5 h-3.5"/>}>New PO</Button>
+              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                <Badge variant={sup.status === 'active' ? 'active' : 'inactive'}>{sup.status === 'active' ? 'Active' : 'Inactive'}</Badge>
+                <RowActions>
+                  <ViewAction onClick={() => setViewSupplier(sup)} title="View supplier" />
+                  <EditAction onClick={() => openEdit(sup)} title="Edit supplier" />
+                  <DeleteAction onClick={() => setDeleteSupplier(sup)} title="Delete supplier" />
+                </RowActions>
               </div>
             </CardBody>
           </Card>
@@ -532,27 +735,137 @@ function SuppliersPage() {
       </div>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add New Supplier" size="md"
-        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Supplier added.'); setShowAdd(false); }}>Save Supplier</Button></>}>
+        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" loading={saving} onClick={handleAdd}>Save Supplier</Button></>}>
         <div className="space-y-4">
-          <Input label="Company Name *" placeholder="e.g. ABC Supplies" />
-          <Input label="Contact Person *" placeholder="e.g. Juan dela Cruz" />
+          <Input label="Company Name *" placeholder="e.g. ABC Supplies" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          <Input label="Contact Person" placeholder="e.g. Juan dela Cruz" value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Email Address" type="email" placeholder="contact@supplier.com" />
-            <Input label="Phone Number *" placeholder="02XXXXXXXX" />
+            <Input label="Email Address" type="email" placeholder="contact@supplier.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+            <Input label="Phone Number" placeholder="02XXXXXXXX" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
           </div>
-          <Input label="Physical Address" placeholder="Street, City, Province" />
-          <Select label="Supply Category *" value="" onChange={() => {}} options={[{value:'',label:'Select...'},{value:'Laundry Supplies',label:'Laundry Supplies'},{value:'Water Supplies',label:'Water Supplies'},{value:'Mixed',label:'Mixed'},{value:'Office Supplies',label:'Office Supplies'}]} />
+          <Input label="Physical Address" placeholder="Street, City, Province" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
+          <Select label="Supply Category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+            options={[{value:'',label:'Select...'},{value:'Laundry',label:'Laundry Supplies'},{value:'Water',label:'Water Supplies'},{value:'Mixed',label:'Mixed'},{value:'Office',label:'Office Supplies'}]} />
         </div>
       </Modal>
+
+      <Modal open={!!editSupplier} onClose={() => setEditSupplier(null)} title={`Edit ${editSupplier?.name ?? 'Supplier'}`} size="md"
+        footer={<><Button variant="ghost" onClick={() => setEditSupplier(null)}>Cancel</Button><Button variant="primary" loading={saving} onClick={saveEdit}>Save Changes</Button></>}>
+        <div className="space-y-4">
+          <Input label="Company Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          <Input label="Contact Person" value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Email Address" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+            <Input label="Phone Number" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
+          </div>
+          <Input label="Physical Address" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
+          <Select label="Supply Category" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+            options={[{value:'',label:'Select...'},{value:'Laundry',label:'Laundry Supplies'},{value:'Water',label:'Water Supplies'},{value:'Mixed',label:'Mixed'},{value:'Office',label:'Office Supplies'}]} />
+        </div>
+      </Modal>
+
+      {viewSupplier && (
+        <Modal open={!!viewSupplier} onClose={() => setViewSupplier(null)} title="Supplier Details" size="sm"
+          footer={<Button variant="ghost" onClick={() => setViewSupplier(null)}>Close</Button>}>
+          <div className="space-y-3">
+            <StatRow label="Supplier ID" value={viewSupplier.id} mono />
+            <StatRow label="Company Name" value={viewSupplier.name} />
+            <StatRow label="Contact Person" value={viewSupplier.contactPerson || '—'} />
+            <StatRow label="Phone" value={viewSupplier.phone || '—'} mono />
+            <StatRow label="Email" value={viewSupplier.email || '—'} />
+            <StatRow label="Address" value={viewSupplier.address || '—'} />
+            <StatRow label="Category" value={viewSupplier.category || '—'} />
+            <StatRow label="Status" value={<Badge variant={viewSupplier.status === 'active' ? 'active' : 'inactive'}>{viewSupplier.status === 'active' ? 'Active' : 'Inactive'}</Badge>} />
+          </div>
+        </Modal>
+      )}
+
+      <Confirm
+        open={!!deleteSupplier}
+        onClose={() => setDeleteSupplier(null)}
+        onConfirm={removeSupplier}
+        title={`Delete ${deleteSupplier?.name ?? ''}?`}
+        message="If stock items or expenses reference this supplier it will be deactivated instead of removed, so historical records stay intact."
+        confirmLabel="Delete Supplier"
+        danger
+      />
     </div>
   );
 }
 
+interface PoLine { itemId: string; qty: string; unitCost: string; }
+
 function PurchaseOrdersPage() {
+  const { data: purchaseOrders, loading, error, reload } = useAsync(() => inventoryService.listPurchaseOrders(), []);
+  const { suppliers, items, refresh: refreshInventory } = useInventory();
+  const { employee } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [viewPO, setViewPO] = useState<any>(null);
   const [confirmPrintPO, setConfirmPrintPO] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [poForm, setPoForm] = useState({ supplierId: '', expectedDelivery: '', notes: '' });
+  const [poLines, setPoLines] = useState<PoLine[]>([]);
   const toast = useToast();
+
+  const addPoLine = () => setPoLines(prev => [...prev, { itemId: '', qty: '1', unitCost: '' }]);
+  const removePoLine = (index: number) => setPoLines(prev => prev.filter((_, i) => i !== index));
+
+  const updatePoLine = (index: number, field: keyof PoLine, value: string) => {
+    setPoLines(prev =>
+      prev.map((line, i) => {
+        if (i !== index) return line;
+        const next = { ...line, [field]: value };
+        // Pre-fill the cost from the item's current cost when one is picked.
+        if (field === 'itemId' && !line.unitCost) {
+          const item = items.find(it => it.id === value);
+          if (item) next.unitCost = String(item.costPerUnit || item.unitPrice || '');
+        }
+        return next;
+      })
+    );
+  };
+
+  const poTotal = poLines.reduce((sum, l) => sum + (parseFloat(l.qty) || 0) * (parseFloat(l.unitCost) || 0), 0);
+
+  const handleCreatePO = async () => {
+    if (!poForm.supplierId) { toast.error('Select a supplier.'); return; }
+    const validLines = poLines.filter(l => l.itemId && parseFloat(l.qty) > 0);
+    if (validLines.length === 0) { toast.error('Add at least one order item.'); return; }
+
+    setCreating(true);
+    try {
+      const supplier = suppliers.find(s => s.id === poForm.supplierId);
+      const po = await inventoryService.createPurchaseOrder({
+        supplierId: poForm.supplierId,
+        supplierName: supplier?.name ?? '',
+        expectedDelivery: poForm.expectedDelivery,
+        requestedBy: employee?.name ?? '',
+        notes: poForm.notes,
+        items: validLines.map(l => {
+          const item = items.find(i => i.id === l.itemId);
+          return {
+            itemId: l.itemId,
+            name: item?.name ?? l.itemId,
+            qty: parseFloat(l.qty),
+            unit: item?.unit ?? 'pcs',
+            unitCost: parseFloat(l.unitCost) || 0,
+          };
+        }),
+      });
+
+      await activityService.log(employee?.id ?? null, 'Inventory', `Created purchase order ${po.id} for ${po.supplierName}`);
+      toast.success(`Purchase order ${po.id} created.`);
+      setShowCreate(false);
+      setPoForm({ supplierId: '', expectedDelivery: '', notes: '' });
+      setPoLines([]);
+      await reload();
+      await refreshInventory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create the purchase order.');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const printPO = (po: any) => {
     exportReportPdf({
@@ -587,7 +900,13 @@ function PurchaseOrdersPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {purchaseOrders.map((po: any) => (
+            {loading ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">Loading purchase orders…</span></Td></Tr>
+            ) : error ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+            ) : purchaseOrders.length === 0 ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No purchase orders yet.</span></Td></Tr>
+            ) : purchaseOrders.map((po: any) => (
               <Tr key={po.id}>
                 <Td className="font-mono text-xs font-bold text-blue-600">{po.id}</Td>
                 <Td className="text-sm font-medium text-slate-600">{fmt.date(po.date)}</Td>
@@ -608,7 +927,9 @@ function PurchaseOrdersPage() {
                 </Td>
                 <Td className="text-sm text-slate-500 font-medium">{po.receivedDate ? fmt.date(po.receivedDate) : '—'}</Td>
                 <Td align="center">
-                  <Button size="xs" variant="ghost" onClick={() => setViewPO(po)} icon={<Eye className="w-4 h-4 text-slate-400"/>} title="View Purchase Order" />
+                  <RowActions>
+                    <ViewAction onClick={() => setViewPO(po)} title="View Purchase Order" />
+                  </RowActions>
                 </Td>
               </Tr>
             ))}
@@ -661,36 +982,52 @@ function PurchaseOrdersPage() {
       />
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Purchase Order" size="lg"
-        footer={<><Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Purchase order created successfully.'); setShowCreate(false); }}>Issue PO</Button></>}>
+        footer={<><Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button><Button variant="primary" loading={creating} onClick={handleCreatePO}>Issue PO</Button></>}>
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-5">
-            <Select label="Supplier *" value="" onChange={() => {}} options={[{value:'',label:'Select supplier...'}, ...suppliers.map(s=>({value:s.id,label:s.name}))]} />
-            <Input label="Expected Delivery Date *" type="date" />
+            <Select label="Supplier *" value={poForm.supplierId} onChange={e => setPoForm(p => ({ ...p, supplierId: e.target.value }))}
+              options={[{value:'',label:'Select supplier...'}, ...suppliers.map(s=>({value:s.id,label:s.name}))]} />
+            <Input label="Expected Delivery Date" type="date" value={poForm.expectedDelivery} onChange={e => setPoForm(p => ({ ...p, expectedDelivery: e.target.value }))} />
           </div>
-          
+
           <div>
             <div className="flex justify-between items-end mb-2">
               <label className="text-sm font-bold text-slate-700">Order Items</label>
-              <Button size="xs" variant="outline" icon={<Plus className="w-3.5 h-3.5"/>}>Add Item</Button>
+              <Button size="xs" variant="outline" onClick={addPoLine} icon={<Plus className="w-3.5 h-3.5"/>}>Add Item</Button>
             </div>
-            <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50">
-              <div className="w-12 h-12 bg-slate-200 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
-                <ShoppingCart className="w-5 h-5" />
+
+            {poLines.length === 0 ? (
+              <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50">
+                <div className="w-12 h-12 bg-slate-200 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <ShoppingCart className="w-5 h-5" />
+                </div>
+                <p className="text-sm font-semibold text-slate-600">No items added yet</p>
+                <p className="text-xs text-slate-400 mt-1">Click the Add Item button to build your purchase order.</p>
               </div>
-              <p className="text-sm font-semibold text-slate-600">No items added yet</p>
-              <p className="text-xs text-slate-400 mt-1">Click the Add Item button to build your purchase order.</p>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                {poLines.map((line, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_80px_110px_auto] gap-2 items-end border border-slate-200 rounded-xl p-3">
+                    <Select label={idx === 0 ? 'Item' : undefined} value={line.itemId}
+                      onChange={e => updatePoLine(idx, 'itemId', e.target.value)}
+                      options={[{ value: '', label: 'Select item...' }, ...items.map(i => ({ value: i.id, label: i.name }))]} />
+                    <Input label={idx === 0 ? 'Qty' : undefined} type="number" min={0} value={line.qty}
+                      onChange={e => updatePoLine(idx, 'qty', e.target.value)} />
+                    <Input label={idx === 0 ? 'Unit Cost' : undefined} type="number" min={0} value={line.unitCost}
+                      onChange={e => updatePoLine(idx, 'unitCost', e.target.value)} />
+                    <Button size="xs" variant="ghost" className="text-red-500 hover:bg-red-50 mb-1" onClick={() => removePoLine(idx)} icon={<XCircle className="w-4 h-4" />} />
+                  </div>
+                ))}
+                <div className="flex justify-between items-center px-3 pt-2 border-t border-slate-100">
+                  <span className="text-sm font-semibold text-slate-600">Order Total</span>
+                  <span className="font-mono font-bold text-slate-900">{fmt.peso(poTotal)}</span>
+                </div>
+              </div>
+            )}
           </div>
-          
-          <Textarea label="Special Instructions / Notes" placeholder="Delivery time requests, terms, etc." rows={2} />
-          
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mt-4">
-            <h4 className="font-semibold text-slate-800 text-sm mb-2">Finance Integration</h4>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">Record this PO as an expense in Finance automatically</span>
-              <Select options={[{value:'unpaid',label:'Mark as Unpaid'},{value:'paid',label:'Mark as Paid / Record Expense'}]} value="unpaid" onChange={()=>{}} className="w-48" />
-            </div>
-          </div>
+
+          <Textarea label="Special Instructions / Notes" placeholder="Delivery time requests, terms, etc." rows={2}
+            value={poForm.notes} onChange={e => setPoForm(p => ({ ...p, notes: e.target.value }))} />
         </div>
       </Modal>
     </div>

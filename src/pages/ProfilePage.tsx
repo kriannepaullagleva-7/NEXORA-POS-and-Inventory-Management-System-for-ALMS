@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button, Confirm,
-  Input, Select, Textarea, useToast, StatRow,
+  Input, Textarea, useToast, StatRow,
 } from '../components/ui';
 import {
   User, Lock, Settings, Store, Bell, Receipt,
   Save, X, Edit, KeyRound, LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { AvatarUpload } from '../components/Avatar';
+import { fmt } from '../utils/formatters';
 import type { PageId } from '../components/Layout';
 
 interface Props { subPage: PageId; userName: string; userRole: 'admin' | 'staff'; onNavigate: (p: PageId) => void; }
@@ -16,11 +18,12 @@ interface Props { subPage: PageId; userName: string; userRole: 'admin' | 'staff'
 export default function ProfilePage({ subPage, userName, userRole, onNavigate }: Props) {
   if (subPage === 'change-password') return <ChangePasswordPage onNavigate={onNavigate} />;
   if (subPage === 'settings') return <SettingsPage userName={userName} userRole={userRole} onNavigate={onNavigate} />;
-  return <MyProfilePage userName={userName} userRole={userRole} />;
+  return <MyProfilePage userRole={userRole} />;
 }
 
 function AccountSection({ userName, userRole, onNavigate }: { userName: string; userRole: 'admin' | 'staff'; onNavigate: (p: PageId) => void }) {
-  const { logout } = useAuth();
+  const { logout, employee, updateProfile } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -32,9 +35,16 @@ function AccountSection({ userName, userRole, onNavigate }: { userName: string; 
       </CardHeader>
       <CardBody className="space-y-4">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex flex-shrink-0 items-center justify-center text-white text-xl font-bold shadow-inner">
-            {userName.charAt(0)}
-          </div>
+          <AvatarUpload
+            name={userName}
+            src={employee?.avatarUrl}
+            size="md"
+            onChange={async url => {
+              await updateProfile({ avatarUrl: url });
+              toast.success(url ? 'Profile photo updated.' : 'Profile photo removed.');
+            }}
+            onError={msg => toast.error(msg)}
+          />
           <div>
             <p className="font-bold text-slate-900">{userName}</p>
             <Badge variant={userRole === 'admin' ? 'admin' : 'staff'}>
@@ -52,7 +62,7 @@ function AccountSection({ userName, userRole, onNavigate }: { userName: string; 
       <Confirm
         open={confirmLogout}
         onClose={() => setConfirmLogout(false)}
-        onConfirm={() => { logout(); navigate('/login'); }}
+        onConfirm={() => { void logout().then(() => navigate('/login')); }}
         title="Sign Out?"
         message="You will be signed out of the system and returned to the login screen."
         confirmLabel="Sign Out"
@@ -62,16 +72,47 @@ function AccountSection({ userName, userRole, onNavigate }: { userName: string; 
   );
 }
 
-function MyProfilePage({ userName, userRole }: { userName: string; userRole: 'admin' | 'staff' }) {
-  const { updateProfile } = useAuth();
+function MyProfilePage({ userRole }: { userRole: 'admin' | 'staff' }) {
+  const { employee, updateProfile } = useAuth();
   const toast = useToast();
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    name: userName,
-    email: userRole === 'admin' ? 'almswaterrefillingstation@gmail.com' : 'maria.santos@alms.ph',
-    phone: userRole === 'admin' ? '0932-854-5660' : '0928-123-4567',
-    address: userRole === 'admin' ? 'Blk 18, Lot 20, Mint St., Countryville Executive Homes, Cabantian, Davao City' : 'Davao City, Philippines',
+    name: employee?.name ?? '',
+    phone: employee?.phone ?? '',
   });
+
+  // Keep the form in sync once the employee record resolves.
+  useEffect(() => {
+    if (employee) setForm({ name: employee.name, phone: employee.phone });
+  }, [employee]);
+
+  if (!employee) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Card><CardBody className="p-10 text-center text-slate-500 text-sm">Loading your profile…</CardBody></Card>
+      </div>
+    );
+  }
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { toast.error('Full name is required.'); return; }
+    setSaving(true);
+    try {
+      await updateProfile({ name: form.name.trim(), phone: form.phone.trim() });
+      toast.success('Profile updated successfully.');
+      setEditing(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update your profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAvatar = async (dataUrl: string | null) => {
+    await updateProfile({ avatarUrl: dataUrl });
+    toast.success(dataUrl ? 'Profile photo updated.' : 'Profile photo removed.');
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -79,11 +120,15 @@ function MyProfilePage({ userName, userRole }: { userName: string; userRole: 'ad
       <Card>
         <CardBody className="p-8">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-8 text-center sm:text-left border-b border-slate-100 pb-8">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex flex-shrink-0 items-center justify-center text-white text-4xl font-bold shadow-inner">
-              {form.name.charAt(0)}
-            </div>
+            <AvatarUpload
+              name={employee.name}
+              src={employee.avatarUrl}
+              size="lg"
+              onChange={handleAvatar}
+              onError={msg => toast.error(msg)}
+            />
             <div className="pt-2">
-              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{form.name}</h2>
+              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{employee.name}</h2>
               <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
                 <Badge variant={userRole === 'admin' ? 'admin' : 'staff'}>
                   {userRole === 'admin' ? 'System Administrator' : 'Staff Member'}
@@ -98,26 +143,22 @@ function MyProfilePage({ userName, userRole }: { userName: string; userRole: 'ad
           {editing ? (
             <div className="space-y-5">
               <Input label="Full Name" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} icon={<User className="w-4 h-4 text-slate-400" />} />
-              <Input label="Email Address" type="email" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} />
+              <Input label="Email Address" type="email" value={employee.email} disabled />
               <Input label="Phone Number" value={form.phone} onChange={e => setForm(p=>({...p,phone:e.target.value}))} />
-              <Input label="Physical Address" value={form.address} onChange={e => setForm(p=>({...p,address:e.target.value}))} />
               <div className="flex gap-3 pt-4">
-                <Button variant="ghost" onClick={() => { setEditing(false); setForm({...form, name: userName}); }} icon={<X className="w-4 h-4" />}>Cancel</Button>
-                <Button variant="primary" onClick={() => { 
-                  updateProfile(form.name); 
-                  toast.success('Profile updated successfully.'); 
-                  setEditing(false); 
-                }} icon={<Save className="w-4 h-4" />}>Save Changes</Button>
+                <Button variant="ghost" onClick={() => { setEditing(false); setForm({ name: employee.name, phone: employee.phone }); }} icon={<X className="w-4 h-4" />}>Cancel</Button>
+                <Button variant="primary" loading={saving} onClick={handleSave} icon={<Save className="w-4 h-4" />}>Save Changes</Button>
               </div>
             </div>
           ) : (
             <>
               <div className="space-y-1 mb-6">
-                <StatRow label="Full Name" value={form.name} />
-                <StatRow label="Email Address" value={form.email} />
-                <StatRow label="Phone Number" value={form.phone} />
+                <StatRow label="Employee ID" value={employee.id} mono />
+                <StatRow label="Full Name" value={employee.name} />
+                <StatRow label="Email Address" value={employee.email} />
+                <StatRow label="Phone Number" value={employee.phone || '—'} />
                 <StatRow label="System Role" value={userRole === 'admin' ? 'Administrator' : 'Cashier / Staff'} />
-                <StatRow label="Registered Address" value={form.address} />
+                <StatRow label="Date Joined" value={employee.joined ? fmt.date(employee.joined) : '—'} />
               </div>
               <Button variant="outline" onClick={() => setEditing(true)} icon={<Edit className="w-4 h-4" />}>Edit Profile Information</Button>
             </>
@@ -130,15 +171,26 @@ function MyProfilePage({ userName, userRole }: { userName: string; userRole: 'ad
 
 function ChangePasswordPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const toast = useToast();
+  const { changePassword } = useAuth();
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ current: '', newPass: '', confirm: '' });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.current || !form.newPass || !form.confirm) { toast.error('All fields are required.'); return; }
     if (form.newPass !== form.confirm) { toast.error('New passwords do not match.'); return; }
     if (form.newPass.length < 8) { toast.error('Password must be at least 8 characters long.'); return; }
-    toast.success('Account password changed successfully.');
-    setForm({ current: '', newPass: '', confirm: '' });
+
+    setSaving(true);
+    try {
+      await changePassword(form.newPass);
+      toast.success('Account password changed successfully.');
+      setForm({ current: '', newPass: '', confirm: '' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not change your password.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -171,7 +223,7 @@ function ChangePasswordPage({ onNavigate }: { onNavigate: (p: PageId) => void })
             
             <div className="flex gap-3 pt-4">
               <Button type="button" variant="ghost" onClick={() => onNavigate('profile')}>Cancel</Button>
-              <Button type="submit" variant="primary">Update Password</Button>
+              <Button type="submit" variant="primary" loading={saving}>Update Password</Button>
             </div>
           </form>
         </CardBody>

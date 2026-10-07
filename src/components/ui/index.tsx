@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, Search, X, CheckCircle2, AlertCircle, Info, XCircle } from 'lucide-react';
+import { Loader2, Search, X, CheckCircle2, AlertCircle, Info, XCircle, FileText, Pencil, Trash2 } from 'lucide-react';
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
 type BadgeVariant =
@@ -125,11 +125,10 @@ interface KpiCardProps {
   subtext?: string;
   icon?: React.ReactNode;
   trend?: { value: string; up: boolean };
-  mono?: boolean;
   iconBg?: string;
   onClick?: () => void;
 }
-export function KpiCard({ title, value, subtext, icon, trend, mono, onClick }: KpiCardProps) {
+export function KpiCard({ title, value, subtext, icon, trend, onClick }: KpiCardProps) {
   return (
     <div
       onClick={onClick}
@@ -142,7 +141,7 @@ export function KpiCard({ title, value, subtext, icon, trend, mono, onClick }: K
       </div>
       {/* Lower-right: value + subtext/trend */}
       <div className="flex flex-col items-end justify-end mt-auto text-right">
-        <div className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight ${mono ? 'font-mono' : ''}`}>{value}</div>
+        <div className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight num`}>{value}</div>
         {(subtext || trend) && (
           <div className="flex items-center justify-end gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
             {trend && (
@@ -159,7 +158,11 @@ export function KpiCard({ title, value, subtext, icon, trend, mono, onClick }: K
 }
 
 // ─── Input / Select / Textarea ────────────────────────────────────────────────
-const inputBase = 'w-full rounded-lg border border-slate-200 bg-white px-3 sm:px-3.5 py-2 sm:py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-smooth hover:border-slate-300 hover:shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:shadow-md disabled:bg-slate-50 disabled:text-slate-500';
+// Horizontal padding is applied separately so an icon slot can reserve space without
+// colliding with `px-*` at larger breakpoints (Tailwind v4 drops the legacy `!` prefix).
+const inputBase = 'w-full rounded-lg border border-slate-200 bg-white py-2 sm:py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-smooth hover:border-slate-300 hover:shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:shadow-md disabled:bg-slate-50 disabled:text-slate-500';
+const inputPadX = 'px-3 sm:px-3.5';
+const inputPadWithIcon = 'pl-10 pr-3 sm:pr-3.5';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -171,8 +174,8 @@ export function Input({ label, error, icon, className = '', ...props }: InputPro
     <div className="flex flex-col gap-1.5">
       {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
       <div className="relative">
-        {icon && <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>}
-        <input className={`${inputBase} ${icon ? '!pl-10' : ''} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`} {...props} />
+        {icon && <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">{icon}</span>}
+        <input className={`${inputBase} ${icon ? inputPadWithIcon : inputPadX} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`} {...props} />
       </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
@@ -188,7 +191,7 @@ export function Select({ label, error, options, className = '', ...props }: Sele
   return (
     <div className="flex flex-col gap-1.5">
       {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
-      <select className={`${inputBase} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`} {...props}>
+      <select className={`${inputBase} ${inputPadX} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`} {...props}>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -204,7 +207,7 @@ export function Textarea({ label, error, className = '', ...props }: TextareaPro
   return (
     <div className="flex flex-col gap-1.5">
       {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
-      <textarea className={`${inputBase} resize-none ${error ? 'border-red-400' : ''} ${className}`} {...props} />
+      <textarea className={`${inputBase} ${inputPadX} resize-none ${error ? 'border-red-400' : ''} ${className}`} {...props} />
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   );
@@ -244,6 +247,58 @@ export function Tr({ children, className = '', onClick }: { children: React.Reac
       {children}
     </tr>
   );
+}
+
+// ─── Table row actions ───────────────────────────────────────────────────────
+// One set of action controls for every table in the app, so the icon, colour
+// and hit area of View / Edit / Delete never drift between modules.
+
+function ActionButton({
+  icon, title, onClick, disabled, tone = 'default',
+}: {
+  icon: React.ReactNode;
+  title: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  tone?: 'default' | 'danger';
+}) {
+  const tones = {
+    default: 'text-slate-500 hover:text-slate-900 hover:bg-slate-100',
+    danger: 'text-red-600 hover:text-red-700 hover:bg-red-50',
+  };
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={e => { e.stopPropagation(); onClick?.(); }}
+      className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${tones[tone]}`}
+    >
+      {icon}
+    </button>
+  );
+}
+
+/** Wraps the buttons in an Actions cell and stops row clicks bubbling. */
+export function RowActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-center gap-0.5" onClick={e => e.stopPropagation()}>
+      {children}
+    </div>
+  );
+}
+
+export function ViewAction({ onClick, title = 'View details' }: { onClick: () => void; title?: string }) {
+  return <ActionButton icon={<FileText className="w-4 h-4" />} title={title} onClick={onClick} />;
+}
+
+export function EditAction({ onClick, disabled, title = 'Edit' }: { onClick: () => void; disabled?: boolean; title?: string }) {
+  return <ActionButton icon={<Pencil className="w-4 h-4" />} title={title} onClick={onClick} disabled={disabled} />;
+}
+
+export function DeleteAction({ onClick, disabled, title = 'Delete' }: { onClick: () => void; disabled?: boolean; title?: string }) {
+  return <ActionButton icon={<Trash2 className="w-4 h-4" />} title={title} onClick={onClick} disabled={disabled} tone="danger" />;
 }
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -465,7 +520,7 @@ export function StatRow({ label, value, mono }: { label: string; value: React.Re
   return (
     <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
       <span className="text-sm text-slate-500">{label}</span>
-      <span className={`text-sm font-medium text-slate-900 ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className={`text-sm font-medium text-slate-900 ${mono ? 'num' : ''}`}>{value}</span>
     </div>
   );
 }
@@ -491,7 +546,7 @@ export function ReceiptLine({ label, value, bold }: { label: string; value: stri
   return (
     <div className={`flex justify-between text-sm py-1 ${bold ? 'font-semibold text-slate-900 border-t border-slate-200 pt-2 mt-1' : 'text-slate-600'}`}>
       <span>{label}</span>
-      <span className="font-mono">{value}</span>
+      <span className="num">{value}</span>
     </div>
   );
 }

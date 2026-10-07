@@ -1,20 +1,53 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { matchesQuery } from '../utils/search';
+import { today } from '../services/helpers';
 import {
-  PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, Confirm, Input, Textarea,
-  SearchBar, useToast, KpiCard, StatRow,
+  PageHeader,
+  Card,
+  CardHeader,
+  CardBody,
+  Badge,
+  Button,
+  Table,
+  Thead,
+  Tbody,
+  Th,
+  Td,
+  Tr,
+  Modal,
+  Confirm,
+  Input,
+  Textarea,
+  SearchBar,
+  useToast,
+  KpiCard
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { printReceipt } from '../utils/pdf';
-import { waterSales } from '../data/water';
-import { customers } from '../data/customers';
-import { useProducts } from '../context/DataContext';
-import { DELIVERY_FEE_CATEGORIES } from '../data/products';
+import { useAsync } from '../hooks/useAsync';
+import { waterService } from '../services/waterService';
+import { pricingService, calcDeliveryFee, describeDeliveryFee } from '../services/pricingService';
+import { paymentService } from '../services/paymentService';
+import { customerService } from '../services/customerService';
+import { activityService } from '../services/activityService';
+import { useProducts, useCustomers } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
+import type { WaterSale } from '../types/models';
 import ProductCatalog from '../components/ProductCatalog';
 import {
-  Droplets, Banknote, Smartphone, ShoppingCart,
-  Search, Plus, MapPin, Truck, ChevronLeft, Droplet, CheckCircle2,
-  AlertCircle, ReceiptText, XCircle, ImageOff
+  Droplets,
+  Banknote,
+  Smartphone,
+  ShoppingCart,
+  Plus,
+  MapPin,
+  Truck,
+  ChevronLeft,
+  Droplet,
+  AlertCircle,
+  ReceiptText,
+  XCircle,
+  ImageOff
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -30,9 +63,10 @@ export default function WaterRefillingPage({ subPage, onNavigate, userName }: Pr
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const toast = useToast();
+  const { data: waterSales, loading, error } = useAsync(() => waterService.listSales(), []);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('today');
-  const [viewSale, setViewSale] = useState<any>(null);
+  const [viewSale, setViewSale] = useState<WaterSale | null>(null);
   const [confirmReprint, setConfirmReprint] = useState(false);
 
   const reprintReceipt = (sale: any) => {
@@ -55,7 +89,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
     toast.success(`Receipt for ${sale.id} downloaded.`);
   };
 
-  const todaySales = waterSales.filter(s => s.date.startsWith('2026-09-29'));
+  const todaySales = waterSales.filter(s => s.date.startsWith(today()));
   const todayCash  = todaySales.filter(s => s.paymentMethod === 'cash').reduce((a, s) => a + s.total, 0);
   const todayGcash = todaySales.filter(s => s.paymentMethod === 'gcash').reduce((a, s) => a + s.total, 0);
   
@@ -65,8 +99,9 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   }, 0);
 
   const filtered = waterSales.filter(s =>
-    s.id.toLowerCase().includes(search.toLowerCase()) ||
-    s.customerName.toLowerCase().includes(search.toLowerCase())
+    matchesQuery(search, s.id, s.date, s.customerName, s.phone, s.address, s.total,
+      s.paymentMethod, s.paymentStatus, s.gcashRef, s.processedBy,
+      s.delivery ? 'delivery' : 'walk-in pickup', s.items.map(i => i.name))
   );
 
   const methodBadge = (method: string) => {
@@ -94,7 +129,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <SearchBar value={search} onChange={setSearch} placeholder="Search sales by ID or Customer…" className="w-full sm:w-80" />
+            <SearchBar value={search} onChange={setSearch} placeholder="Search sales by ID, date, customer, phone, amount, method or status…" className="w-full sm:w-80" />
             <select value={dateFilter} onChange={e => setDateFilter(e.target.value)}
               className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white">
               <option value="today">Today</option>
@@ -120,7 +155,11 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             </Tr>
           </Thead>
           <Tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">Loading sales…</span></Td></Tr>
+            ) : error ? (
+              <Tr><Td colSpan={9} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+            ) : filtered.length === 0 ? (
               <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No sales found</span></Td></Tr>
             ) : filtered.map(sale => (
               <Tr key={sale.id} onClick={() => setViewSale(sale)}>
@@ -243,11 +282,15 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 }
 
 // ─── Water POS ────────────────────────────────────────────────────────────────
-interface CartLine { productId: string; name: string; price: number; qty: number; category: string; subtotal: number; }
+interface CartLine { productId: string; name: string; price: number; qty: number; category: string; subtotal: number; countsForDelivery: boolean; }
 
 function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
   const toast = useToast();
-  const { byModule } = useProducts();
+  const { byModule, refresh: refreshProducts } = useProducts();
+  const { customers } = useCustomers();
+  const { employee } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const { data: deliveryTiers } = useAsync(() => pricingService.listDeliveryTiers(), []);
   const waterProducts = byModule('water').filter(p => p.active);
 
   const [custSearch, setCustSearch] = useState('');
@@ -269,29 +312,27 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
   const [confirmPrint, setConfirmPrint] = useState(false);
   const [txnId] = useState(`WAT-TXN-${String(Math.floor(Math.random()*900)+100)}`);
 
-  // Compute dynamic delivery fee based on gallons
-  const deliveryFee = useMemo(() => {
-    if (!deliveryEnabled) return 0;
-    const gallonCount = cart.reduce((acc, item) => {
-      if (DELIVERY_FEE_CATEGORIES.includes(item.category)) return acc + item.qty;
-      return acc;
-    }, 0);
-    
-    if (gallonCount === 0) return 0; // Or minimum fee
-    if (gallonCount === 1) return 35;
-    if (gallonCount === 2) return 70;
-    if (gallonCount === 3) return 100;
-    if (gallonCount === 4) return 135;
-    if (gallonCount === 5) return 170;
-    if (gallonCount === 6) return 200;
-    
-    // Fallback for > 6
-    return 200 + (gallonCount - 6) * 30;
-  }, [cart, deliveryEnabled]);
+  // Number of refilled waters in the cart — only these drive the delivery tier.
+  const refillCount = useMemo(
+    () => cart.reduce((acc, item) => (item.countsForDelivery ? acc + item.qty : acc), 0),
+    [cart]
+  );
+
+  // Delivery is tiered and configured in Products and Services, never qty x rate.
+  const deliveryFee = useMemo(
+    () => (deliveryEnabled ? calcDeliveryFee(refillCount, deliveryTiers) : 0),
+    [deliveryEnabled, refillCount, deliveryTiers]
+  );
+
+  // A tiered fee cannot be checked in your head (4 refills is 155, not 4 x 35),
+  // so the POS shows which tiers it charged.
+  const deliveryBreakdown = useMemo(
+    () => describeDeliveryFee(refillCount, deliveryTiers),
+    [refillCount, deliveryTiers]
+  );
 
   const filteredCusts = customers.filter(c =>
-    `${c.firstName} ${c.lastName}`.toLowerCase().includes(custSearch.toLowerCase()) ||
-    c.phone.includes(custSearch)
+    matchesQuery(custSearch, c.id, c.firstName, c.lastName, `${c.firstName} ${c.lastName}`, c.phone, c.email, c.address)
   );
 
   const categories = ['All', ...Array.from(new Set(waterProducts.map(p => p.category)))];
@@ -301,7 +342,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
     setCart(prev => {
       const ex = prev.find(c => c.productId === product.id);
       if (ex) return prev.map(c => c.productId === product.id ? {...c, qty: c.qty + 1, subtotal: (c.qty+1)*c.price} : c);
-      return [...prev, { productId: product.id, name: product.name, price: product.price, qty: 1, category: product.category, subtotal: product.price }];
+      return [...prev, { productId: product.id, name: product.name, price: product.price, qty: 1, category: product.category, subtotal: product.price, countsForDelivery: Boolean(product.countsForDelivery) }];
     });
   };
 
@@ -327,10 +368,72 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
     setShowReceipt(true);
   };
 
-  const resetTransaction = () => {
-    setCart([]); setSelectedCustomer(null); setCustSearch(''); setIsNewCust(false); setNewCust({name:'',phone:'',address:''});
-    setDeliveryEnabled(false); setDeliveryAddress('');
-    setPaymentMethod(''); setAmountReceived(''); setGcashRef(''); setNotes(''); setShowReceipt(false);
+  /** Persists the sale, its line items, stock deduction and ledger entry. */
+  const persistSale = async () => {
+    setSaving(true);
+    try {
+      let customerId: string | null = selectedCustomer?.id ?? null;
+      if (!customerId && isNewCust && newCust.name) {
+        const [firstName, ...rest] = newCust.name.trim().split(' ');
+        const created = await customerService.findOrCreate({
+          firstName,
+          lastName: rest.join(' '),
+          email: '',
+          phone: newCust.phone,
+          address: newCust.address,
+        });
+        customerId = created?.id ?? null;
+      }
+
+      const sale = await waterService.createSale({
+        customerId,
+        customerName: custName ?? 'Walk-in',
+        phone: selectedCustomer?.phone ?? newCust.phone ?? '',
+        address: selectedCustomer?.address ?? newCust.address ?? '',
+        items: cart.map(c => ({ productId: c.productId, qty: c.qty, price: c.price, subtotal: c.subtotal })),
+        subtotal: cartSubtotal,
+        deliveryFee,
+        discount: 0,
+        total,
+        amtPaid: paymentMethod === 'unpaid' ? 0 : received,
+        change,
+        paymentMethod: paymentMethod === 'unpaid' ? '' : paymentMethod,
+        paymentStatus: paymentMethod === 'unpaid' ? 'unpaid' : received >= total ? 'paid' : 'partial',
+        gcashRef,
+        delivery: deliveryEnabled,
+        deliveryAddress: deliveryEnabled ? (deliveryAddress || selectedCustomer?.address || '') : '',
+        notes,
+        processedBy: userName,
+      });
+
+      if (paymentMethod !== 'unpaid' && received > 0) {
+        await paymentService.create({
+          waterTransactionId: sale.id,
+          customerId,
+          customerName: sale.customerName,
+          type: 'water',
+          amount: total,
+          amtReceived: received,
+          change,
+          balance,
+          method: paymentMethod,
+          status: received >= total ? 'paid' : 'partial',
+          gcashRef,
+          processedBy: userName,
+        });
+      }
+
+      await activityService.log(employee?.id ?? null, 'Water Refilling', `Created water sale ${sale.id} (${fmt.peso(total)})`);
+      await refreshProducts(); // stock levels changed
+
+      toast.success(`Transaction ${sale.id} completed!`);
+      if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
+      onNavigate('water');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save the transaction.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Receipt UI
@@ -421,11 +524,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
         
         <div className="flex gap-3 mt-6">
           <Button variant="outline" className="flex-1 justify-center" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
-          <Button variant="primary" className="flex-1 justify-center" onClick={() => {
-            toast.success(`Transaction ${txnId} completed!`);
-            if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
-            onNavigate('water');
-          }}>Confirm & Finish</Button>
+          <Button variant="primary" className="flex-1 justify-center" loading={saving} onClick={persistSale}>Confirm & Finish</Button>
         </div>
 
         <Confirm
@@ -486,7 +585,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
             <CardBody className="py-4">
               {!isNewCust ? (
                 <div className="space-y-3">
-                  <SearchBar value={custSearch} onChange={setCustSearch} placeholder="Search customer name or phone…" />
+                  <SearchBar value={custSearch} onChange={setCustSearch} placeholder="Search customer by name, phone, email or address…" />
                   {custSearch && !selectedCustomer && (
                     <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-48 overflow-y-auto">
                       {filteredCusts.length === 0 ? (
@@ -523,33 +622,82 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
 
           {/* Delivery Toggle */}
           <Card>
-            <CardBody className="p-1">
-              <button onClick={() => setDeliveryEnabled(p => !p)} className={`w-full flex justify-between items-center px-5 py-4 rounded-xl transition-all ${deliveryEnabled ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${deliveryEnabled ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
+            <CardBody className="p-0">
+              {/*
+                A real switch, not a div that happens to be clickable: the whole
+                row is one button with role="switch", so it is reachable by
+                keyboard and announced correctly. Its height does not depend on
+                the state, so flipping it does not nudge the rest of the column.
+              */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={deliveryEnabled}
+                onClick={() => setDeliveryEnabled(p => !p)}
+                className={`w-full flex items-center justify-between gap-3 px-4 py-4 text-left rounded-t-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 ${deliveryEnabled ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+              >
+                <span className="flex items-center gap-3 min-w-0">
+                  <span className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-colors ${deliveryEnabled ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
                     <Truck className="w-5 h-5" />
-                  </div>
-                  <div className="text-left">
-                    <p className={`font-bold text-sm ${deliveryEnabled ? 'text-blue-900' : 'text-slate-800'}`}>Enable Delivery</p>
-                    <p className={`text-xs ${deliveryEnabled ? 'text-blue-600' : 'text-slate-500'}`}>Ship products to customer address</p>
-                  </div>
-                </div>
-                <div className={`relative w-12 h-6 rounded-full transition-colors ${deliveryEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
-                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${deliveryEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
-                </div>
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`block font-bold text-sm truncate ${deliveryEnabled ? 'text-blue-900' : 'text-slate-800'}`}>
+                      Enable Delivery
+                    </span>
+                    <span className={`block text-xs truncate ${deliveryEnabled ? 'text-blue-600' : 'text-slate-500'}`}>
+                      {deliveryEnabled ? 'Charged from the delivery price list' : 'Deliver to the customer address'}
+                    </span>
+                  </span>
+                </span>
+
+                <span className={`relative shrink-0 w-12 h-6 rounded-full transition-colors ${deliveryEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                  <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${deliveryEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                </span>
               </button>
-              
+
               {deliveryEnabled && (
-                <div className="px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2">
-                  <div className="space-y-4">
-                    <Textarea label="Delivery Address *" value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder="Enter full address…" rows={2} />
-                    <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 flex justify-between items-center">
-                      <span className="text-sm font-semibold text-blue-800">Calculated Delivery Fee</span>
-                      <span className="font-mono font-bold text-blue-900">{fmt.peso(deliveryFee)}</span>
+                <div className="px-4 pt-3 pb-4 border-t border-blue-100 space-y-3">
+                  <Textarea
+                    label="Delivery Address *"
+                    value={deliveryAddress}
+                    onChange={e => setDeliveryAddress(e.target.value)}
+                    placeholder={selectedCustomer?.address || 'Enter full address…'}
+                    rows={2}
+                  />
+
+                  {refillCount === 0 ? (
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-500">
+                      Add refills to the cart to calculate the delivery fee.
+                      Caps and empty containers are not charged delivery.
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-100">
+                      <div className="flex justify-between items-baseline gap-2">
+                        <span className="text-sm font-semibold text-blue-800">
+                          Delivery Fee
+                          <span className="font-normal text-blue-600"> · {refillCount} refill{refillCount === 1 ? '' : 's'}</span>
+                        </span>
+                        <span className="num font-bold text-blue-900">{fmt.peso(deliveryFee)}</span>
+                      </div>
+                      {deliveryBreakdown.steps.length > 1 && (
+                        <p className="mt-1.5 text-xs text-blue-700/80">
+                          {deliveryBreakdown.steps.map(step => `${step.quantity} x ${fmt.peso(step.price)}`).join('  +  ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
+
+              <div className="px-4 pt-3 pb-4 border-t border-slate-100">
+                <Textarea
+                  label="Order Notes (Optional)"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Delivery timing, container condition, etc."
+                  rows={2}
+                />
+              </div>
             </CardBody>
           </Card>
 
@@ -710,7 +858,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
                   </div>
                 )}
 
-                <Button variant="primary" size="lg" className="w-full justify-center !py-3.5" onClick={handleSave}>
+                <Button variant="primary" size="lg" className="w-full justify-center py-3.5!" onClick={handleSave}>
                   Complete Transaction
                 </Button>
               </div>

@@ -1,18 +1,47 @@
-import React, { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { useState } from 'react';
+import { matchesQuery } from '../utils/search';
+import { today } from '../services/helpers';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import {
-  PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Table, Thead, Tbody, Th, Td, Tr, Modal, ExportDialog, Input, Select, Textarea,
-  SearchBar, useToast, KpiCard, StatRow,
+  PageHeader,
+  Card,
+  CardHeader,
+  CardBody,
+  Badge,
+  Button,
+  Table,
+  Thead,
+  Tbody,
+  Th,
+  Td,
+  Tr,
+  Modal,
+  ExportDialog,
+  Input,
+  Select,
+  Textarea,
+  SearchBar,
+  useToast,
+  KpiCard
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { exportReportPdf } from '../utils/pdf';
-import { monthlyRevenue, expenses } from '../data/finance';
-import { payments } from '../data/payments';
-import { 
-  Banknote, TrendingUp, TrendingDown, Receipt, FileText, 
-  Wallet, PieChart as PieChartIcon, Activity, Plus, Search, 
-  Download, Printer, AlertCircle, ShoppingCart
+import { useAsync } from '../hooks/useAsync';
+import { reportService } from '../services/reportService';
+import { financeService } from '../services/financeService';
+import { inventoryService } from '../services/inventoryService';
+import { activityService } from '../services/activityService';
+import { useAuth } from '../context/AuthContext';
+import {
+  Banknote,
+  TrendingUp,
+  TrendingDown,
+  Receipt,
+  Wallet,
+  Activity,
+  Plus,
+  Download,
+  Printer
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -26,6 +55,8 @@ export default function FinancePage({ subPage }: Props) {
 }
 
 function FinanceDashboard() {
+  const { data: monthlyRevenue } = useAsync(() => reportService.monthlyRevenue(), []);
+  const { data: expenses } = useAsync(() => financeService.listExpenses(), []);
   const [dateRange, setDateRange] = useState<'month'|'quarter'|'ytd'>('ytd');
 
   const sliceMap = { month: 1, quarter: 3, ytd: 9 };
@@ -45,7 +76,7 @@ function FinanceDashboard() {
   const expByBankMethod = expenses.filter(e => e.method === 'bank').reduce((s, e) => s + e.amount, 0);
 
   const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444'];
-  const dateLabels = { month: 'This Month', quarter: 'Last 3 Months', ytd: 'Jan – Sep 2026' };
+  const dateLabels = { month: 'This Month', quarter: 'Last 3 Months', ytd: `Year to date ${new Date().getFullYear()}` };
 
   return (
     <div className="space-y-6">
@@ -63,15 +94,15 @@ function FinanceDashboard() {
 
       {/* 6-card KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-        <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} mono subtext={dateLabels[dateRange]}
+        <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} subtext={dateLabels[dateRange]}
           icon={<Banknote className="w-5 h-5 text-slate-500" />} />
-        <KpiCard title="Cash Sales" value={fmt.peso(totalCashSales)} mono
+        <KpiCard title="Cash Sales" value={fmt.peso(totalCashSales)}
           icon={<Banknote className="w-5 h-5 text-green-500" />} />
-        <KpiCard title="GCash Sales" value={fmt.peso(totalGcashSales)} mono
+        <KpiCard title="GCash Sales" value={fmt.peso(totalGcashSales)}
           icon={<Wallet className="w-5 h-5 text-blue-500" />} />
-        <KpiCard title="Total Expenses" value={fmt.peso(totalExpenses)} mono trend={{ value: 'vs revenue', up: false }}
+        <KpiCard title="Total Expenses" value={fmt.peso(totalExpenses)} trend={{ value: 'vs revenue', up: false }}
           icon={<TrendingDown className="w-5 h-5 text-red-500" />} />
-        <KpiCard title="Net Revenue" value={fmt.peso(netRevenue)} mono trend={{ value: netRevenue >= 0 ? 'Profitable' : 'Loss', up: netRevenue >= 0 }}
+        <KpiCard title="Net Revenue" value={fmt.peso(netRevenue)} trend={{ value: netRevenue >= 0 ? 'Profitable' : 'Loss', up: netRevenue >= 0 }}
           icon={<TrendingUp className={`w-5 h-5 ${netRevenue >= 0 ? 'text-emerald-500' : 'text-red-500'}`} />} />
         <KpiCard title="Margin %" value={`${totalRevenue > 0 ? (netRevenue/totalRevenue*100).toFixed(1) : 0}%`} 
           icon={<Activity className="w-5 h-5 text-slate-400" />} />
@@ -209,32 +240,69 @@ function FinanceDashboard() {
 }
 
 function ExpensesPage() {
+  const { data: expenses, loading, error, reload } = useAsync(() => financeService.listExpenses(), []);
+  const { data: suppliers } = useAsync(() => inventoryService.listSuppliers(), []);
+  const { employee } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [form, setForm] = useState({
+    category: '', description: '', amount: '', date: today(),
+    method: 'cash', supplierId: '', notes: '',
+  });
   const toast = useToast();
-  
+
   const filtered = expenses.filter(e =>
-    e.description.toLowerCase().includes(search.toLowerCase()) ||
-    e.category.toLowerCase().includes(search.toLowerCase())
+    matchesQuery(search, e.id, e.date, e.category, e.description, e.amount, e.method, e.supplier, e.by, e.notes)
   );
   const total = filtered.reduce((s, e) => s + e.amount, 0);
+
+  const handleAdd = async () => {
+    if (!form.category) { toast.error('Select an expense category.'); return; }
+    if (!form.description.trim()) { toast.error('Enter a description.'); return; }
+    const amount = parseFloat(form.amount);
+    if (!form.amount || isNaN(amount) || amount <= 0) { toast.error('Enter a valid amount.'); return; }
+
+    setSaving(true);
+    try {
+      await financeService.createExpense({
+        date: form.date,
+        category: form.category,
+        description: form.description.trim(),
+        amount,
+        method: form.method,
+        supplierId: form.supplierId || null,
+        recordedBy: employee?.name ?? '',
+        notes: form.notes.trim(),
+      });
+      await activityService.log(employee?.id ?? null, 'Finance', `Recorded ${form.category} expense of ${fmt.peso(amount)}`);
+      toast.success('Expense recorded successfully.');
+      setShowAdd(false);
+      setForm({ category: '', description: '', amount: '', date: today(), method: 'cash', supplierId: '', notes: '' });
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not record the expense.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader title="Expense Management" subtitle="Record, track, and categorize business expenses"
         actions={<Button onClick={() => setShowAdd(true)} icon={<Plus className="w-4 h-4" />}>Add Expense</Button>} />
-        
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Expenses (Sep)" value={fmt.peso(expenses.reduce((s: number, e: any)=>s+e.amount,0))} mono icon={<TrendingDown className="w-5 h-5 text-red-500" />} />
+        <KpiCard title="Total Expenses" value={fmt.peso(expenses.reduce((s: number, e: any)=>s+e.amount,0))} icon={<TrendingDown className="w-5 h-5 text-red-500" />} />
         {['Inventory Purchase','Utilities','Rent'].map(cat => (
-          <KpiCard key={cat} title={cat} value={fmt.peso(expenses.filter((e: any) => e.category === cat).reduce((s: number, e: any)=>s+e.amount,0))} mono icon={<Receipt className="w-5 h-5 text-slate-400" />} />
+          <KpiCard key={cat} title={cat} value={fmt.peso(expenses.filter((e: any) => e.category === cat).reduce((s: number, e: any)=>s+e.amount,0))} icon={<Receipt className="w-5 h-5 text-slate-400" />} />
         ))}
       </div>
       
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <SearchBar value={search} onChange={setSearch} placeholder="Search by description or category…" className="w-full sm:w-80" />
+            <SearchBar value={search} onChange={setSearch} placeholder="Search expenses by ID, date, category, description, amount, method or staff…" className="w-full sm:w-80" />
             <div className="text-right ml-4">
               <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Filtered Total</p>
               <p className="font-mono text-lg font-bold text-slate-900">{fmt.peso(total)}</p>
@@ -254,7 +322,13 @@ function ExpensesPage() {
               </Tr>
             </Thead>
             <Tbody>
-              {filtered.map((exp: any) => (
+              {loading ? (
+                <Tr><Td colSpan={7} align="center"><span className="text-slate-500 py-6 block">Loading expenses…</span></Td></Tr>
+              ) : error ? (
+                <Tr><Td colSpan={7} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+              ) : filtered.length === 0 ? (
+                <Tr><Td colSpan={7} align="center"><span className="text-slate-500 py-6 block">No expenses recorded yet.</span></Td></Tr>
+              ) : filtered.map((exp: any) => (
                 <Tr key={exp.id}>
                   <Td className="font-mono text-xs font-bold text-blue-600">{exp.id}</Td>
                   <Td className="text-sm font-medium text-slate-600">{fmt.date(exp.date)}</Td>
@@ -275,16 +349,22 @@ function ExpensesPage() {
       </Card>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Record New Expense" size="md"
-        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Expense recorded successfully.'); setShowAdd(false); }}>Save Expense</Button></>}>
+        footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" loading={saving} onClick={handleAdd}>Save Expense</Button></>}>
         <div className="space-y-4">
-          <Select label="Expense Category *" value="" onChange={() => {}} options={[{value:'',label:'Select...'},{value:'Inventory Purchase',label:'Inventory Purchase'},{value:'Utilities',label:'Utilities'},{value:'Rent',label:'Rent'},{value:'Salaries',label:'Salaries'},{value:'Maintenance',label:'Maintenance'},{value:'Other',label:'Other'}]} />
-          <Input label="Description *" placeholder="Brief description of expense" />
+          <Select label="Expense Category *" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+            options={[{value:'',label:'Select...'},{value:'Inventory/Supplies',label:'Inventory / Supplies'},{value:'Utilities',label:'Utilities'},{value:'Rent',label:'Rent'},{value:'Salaries',label:'Salaries'},{value:'Maintenance',label:'Maintenance'},{value:'Other',label:'Other'}]} />
+          <Input label="Description *" placeholder="Brief description of expense" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Amount (₱) *" type="number" placeholder="0.00" />
-            <Input label="Date *" type="date" />
+            <Input label="Amount (₱) *" type="number" placeholder="0.00" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} />
+            <Input label="Date *" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
           </div>
-          <Select label="Payment Method *" value="" onChange={() => {}} options={[{value:'cash',label:'Cash'},{value:'bank',label:'Bank Transfer'},{value:'gcash',label:'GCash'}]} />
-          <Textarea label="Notes / Reference (Optional)" rows={2} placeholder="Invoice numbers, additional details…" />
+          <div className="grid grid-cols-2 gap-4">
+            <Select label="Payment Method *" value={form.method} onChange={e => setForm(p => ({ ...p, method: e.target.value }))}
+              options={[{value:'cash',label:'Cash'},{value:'bank',label:'Bank Transfer'},{value:'gcash',label:'GCash'}]} />
+            <Select label="Supplier (Optional)" value={form.supplierId} onChange={e => setForm(p => ({ ...p, supplierId: e.target.value }))}
+              options={[{ value: '', label: 'None' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
+          </div>
+          <Textarea label="Notes / Reference (Optional)" rows={2} placeholder="Invoice numbers, additional details…" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
         </div>
       </Modal>
     </div>
@@ -292,11 +372,15 @@ function ExpensesPage() {
 }
 
 function FinancialReportsPage() {
+  const { data: monthlyRevenue, loading } = useAsync(() => reportService.monthlyRevenue(), []);
+  const { data: expenses } = useAsync(() => financeService.listExpenses(), []);
   const [period, setPeriod] = useState('monthly');
   const [exportMode, setExportMode] = useState<'export' | 'print' | null>(null);
   const toast = useToast();
   const totalRev = monthlyRevenue.reduce((s: number, m: any)=>s+m.laundry+m.water,0);
   const totalExp = expenses.reduce((s: number, e: any)=>s+e.amount,0);
+  const laundryRev = monthlyRevenue.reduce((s: number, m: any) => s + m.laundry, 0);
+  const waterRev = monthlyRevenue.reduce((s: number, m: any) => s + m.water, 0);
   const periodLabel: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
 
   const handleExportConfirm = () => {
@@ -306,7 +390,7 @@ function FinancialReportsPage() {
       columns: ['Period', 'Laundry Rev.', 'Water Rev.', 'Total Revenue', 'Est. Expenses', 'Net Income', 'Profit Margin'],
       rows: monthlyRevenue.map((m: any) => {
         const rev = m.laundry + m.water;
-        const exp = Math.round(rev * 0.55);
+        const exp = m.expenses || 0;
         const net = rev - exp;
         const margin = rev > 0 ? `${((net / rev) * 100).toFixed(1)}%` : '0.0%';
         return [`${m.month} 2026`, fmt.peso(m.laundry), fmt.peso(m.water), fmt.peso(rev), fmt.peso(exp), fmt.peso(net), margin];
@@ -340,7 +424,7 @@ function FinancialReportsPage() {
           <CardHeader><h3 className="font-semibold text-slate-900 tracking-tight">Revenue vs Expenses — Monthly</h3></CardHeader>
           <CardBody className="flex-1 pt-2 min-h-[320px]">
             <ResponsiveContainer width="100%" height="100%" minHeight={280}>
-              <BarChart data={monthlyRevenue.map(m => ({ ...m, total: m.laundry + m.water, expense: Math.round((m.laundry + m.water) * 0.55) }))}>
+              <BarChart data={monthlyRevenue.map(m => ({ ...m, total: m.laundry + m.water, expense: m.expenses }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `₱${(v/1000).toFixed(0)}k`} width={45} dx={-10} />
@@ -362,10 +446,10 @@ function FinancialReportsPage() {
             <div className="space-y-4">
               <div className="p-4 bg-white rounded-xl border border-green-100 shadow-sm">
                 <p className="text-xs font-bold text-green-600 uppercase tracking-wider mb-1 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Total Revenue</p>
-                <p className="text-2xl font-bold text-green-700 font-mono tracking-tight">{fmt.peso(48000 + 27000)}</p>
+                <p className="text-2xl font-bold text-green-700 font-mono tracking-tight">{fmt.peso(totalRev)}</p>
                 <div className="mt-3 pt-3 border-t border-green-50 space-y-2">
-                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Laundry Sales</span><span className="font-mono font-bold text-slate-800">{fmt.peso(48000)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Water Sales</span><span className="font-mono font-bold text-slate-800">{fmt.peso(27000)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Laundry Sales</span><span className="font-mono font-bold text-slate-800">{fmt.peso(laundryRev)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Water Sales</span><span className="font-mono font-bold text-slate-800">{fmt.peso(waterRev)}</span></div>
                 </div>
               </div>
               
@@ -373,16 +457,24 @@ function FinancialReportsPage() {
                 <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1 flex items-center gap-1.5"><TrendingDown className="w-3.5 h-3.5" /> Total Expenses</p>
                 <p className="text-2xl font-bold text-red-700 font-mono tracking-tight">{fmt.peso(totalExp)}</p>
                 <div className="mt-3 pt-3 border-t border-red-50 space-y-2">
-                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Inventory</span><span className="font-mono font-bold text-slate-800">{fmt.peso(18700)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Utilities</span><span className="font-mono font-bold text-slate-800">{fmt.peso(10600)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Rent</span><span className="font-mono font-bold text-slate-800">{fmt.peso(15000)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-600 font-medium">Salaries</span><span className="font-mono font-bold text-slate-800">{fmt.peso(24000)}</span></div>
+                  {Object.entries(
+                    expenses.reduce((acc: Record<string, number>, e: any) => {
+                      acc[e.category] = (acc[e.category] || 0) + e.amount;
+                      return acc;
+                    }, {})
+                  ).slice(0, 5).map(([category, amount]) => (
+                    <div key={category} className="flex justify-between text-sm">
+                      <span className="text-slate-600 font-medium">{category}</span>
+                      <span className="font-mono font-bold text-slate-800">{fmt.peso(amount as number)}</span>
+                    </div>
+                  ))}
+                  {expenses.length === 0 && <p className="text-xs text-slate-400">No expenses recorded yet.</p>}
                 </div>
               </div>
               
               <div className="p-4 bg-slate-900 rounded-xl shadow-md mt-4">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Net Income (Profit)</p>
-                <p className="text-2xl font-bold text-white font-mono tracking-tight">{fmt.peso(75000 - totalExp)}</p>
+                <p className="text-2xl font-bold text-white font-mono tracking-tight">{fmt.peso(totalRev - totalExp)}</p>
               </div>
             </div>
           </CardBody>
@@ -404,9 +496,13 @@ function FinancialReportsPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {monthlyRevenue.map((m: any) => {
+            {loading ? (
+              <Tr><Td colSpan={7} align="center"><span className="text-slate-500 py-6 block">Loading report…</span></Td></Tr>
+            ) : monthlyRevenue.length === 0 ? (
+              <Tr><Td colSpan={7} align="center"><span className="text-slate-500 py-6 block">No revenue recorded yet.</span></Td></Tr>
+            ) : monthlyRevenue.map((m: any) => {
               const rev = m.laundry + m.water;
-              const exp = Math.round(rev * 0.55);
+              const exp = m.expenses || 0;
               const net = rev - exp;
               const margin = ((net/rev)*100).toFixed(1);
               return (

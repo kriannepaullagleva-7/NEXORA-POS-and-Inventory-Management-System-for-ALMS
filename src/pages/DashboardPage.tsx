@@ -1,11 +1,10 @@
-import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardBody, Badge, Button, KpiCard, Table, Thead, Tbody, Th, Td, Tr, ChartTooltip } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { laundryOrders } from '../data/laundry';
-import { waterSales } from '../data/water';
-import { payments } from '../data/payments';
-import { dailyRevenue } from '../data/finance';
+import { useAsync } from '../hooks/useAsync';
+import { useState } from 'react';
+import { reportService, type Period, type PeriodSummary } from '../services/reportService';
+import { laundryService } from '../services/laundryService';
 import {
   Banknote, CreditCard, Receipt, Waves, Droplet,
   Search, PackagePlus, PackageMinus,
@@ -16,28 +15,49 @@ import type { PageId } from '../components/Layout';
 interface Props { onNavigate: (p: PageId) => void; userRole: 'admin' | 'staff'; }
 
 export default function DashboardPage({ onNavigate, userRole }: Props) {
-  const today = '2026-09-29';
-  const todayLaundry = laundryOrders.filter(o => o.date.startsWith(today));
-  const todayWater   = waterSales.filter(s => s.date.startsWith(today));
-  const todayPayments = payments.filter(p => p.date.startsWith(today));
+  // The headline figures follow this filter; the lists below stay on today,
+  // because they are what the counter staff act on right now.
+  const [period, setPeriod] = useState<Period>('daily');
 
-  const todayCash  = todayPayments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
-  const todayGCash = todayPayments.filter(p => p.method === 'gcash').reduce((s, p) => s + p.amount, 0);
-  const todayTotal = todayCash + todayGCash;
-  const readyCount   = laundryOrders.filter(o => o.status === 'ready').length;
+  const { data: summary, loading: summaryLoading } = useAsync<PeriodSummary>(
+    () => reportService.summary(period),
+    {
+      label: 'Today', from: '', to: '',
+      laundryRevenue: 0, waterRevenue: 0, totalRevenue: 0,
+      laundryCount: 0, waterCount: 0, totalTransactions: 0,
+      cash: 0, gcash: 0, expenses: 0, netRevenue: 0, averageTicket: 0, outstanding: 0,
+    },
+    [period]
+  );
+
+  const { data: snapshot, loading: snapshotLoading } = useAsync(
+    () => reportService.todaySnapshot(),
+    { laundryOrders: [], waterSales: [], cash: 0, gcash: 0, paymentCount: 0 }
+  );
+  const { data: dailyRevenue } = useAsync(() => reportService.dailyRevenue(), []);
+  const { data: allOrders } = useAsync(() => laundryService.listOrders(), []);
+
+  const todayLaundry = snapshot.laundryOrders as any[];
+  const todayWater = snapshot.waterSales as any[];
+
+  const periodCash = summary.cash;
+  const periodGCash = summary.gcash;
+  const periodCollected = periodCash + periodGCash;
+  const readyOrders = allOrders.filter(o => o.status === 'ready');
+  const readyCount = readyOrders.length;
 
   const recentTransactions = [
     ...todayLaundry.map(o => ({
-      id: o.id, type: 'Laundry', customer: o.customerName,
-      amount: o.total, method: o.paymentMethod || 'unpaid',
-      status: o.paymentStatus, employee: o.processedBy, date: o.date,
+      id: o.id, type: 'Laundry', customer: o.customer_name,
+      amount: Number(o.total) || 0, method: o.payment_method || 'unpaid',
+      status: o.payment_status, employee: o.processed_by, date: o.date,
     })),
     ...todayWater.map(s => ({
-      id: s.id, type: 'Water', customer: s.customerName,
-      amount: s.total, method: s.paymentMethod,
-      status: s.paymentStatus, employee: s.processedBy, date: s.date,
+      id: s.id, type: 'Water', customer: s.customer_name,
+      amount: Number(s.total) || 0, method: s.payment_method,
+      status: s.payment_status, employee: s.processed_by, date: s.date,
     })),
-  ].sort((a, b) => b.date.localeCompare(a.date));
+  ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
   const quickActions = [
     { label: 'New Laundry', page: 'laundry-new' as PageId, icon: <Waves className="w-4 h-4" /> },
@@ -54,35 +74,68 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
 
   return (
     <div className="space-y-4 sm:space-y-5 md:space-y-6">
+      {/* Period filter — every figure in the row below reads from it. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-slate-900 tracking-tight">{summary.label}</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {summaryLoading
+              ? 'Loading…'
+              : summary.from === summary.to
+                ? summary.from
+                : `${summary.from} to ${summary.to}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg" role="group" aria-label="Reporting period">
+          {([
+            ['daily', 'Today'],
+            ['weekly', 'Week'],
+            ['monthly', 'Month'],
+            ['yearly', 'Year'],
+          ] as [Period, string][]).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPeriod(id)}
+              aria-pressed={period === id}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                period === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* KPI Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-        <KpiCard 
-          title="Today's Sales" 
-          value={fmt.peso(todayTotal)} 
-          subtext={`${todayPayments.length} payments`} 
-          icon={<Banknote className="w-5 h-5" />} 
-          trend={{ value: '12%', up: true }}
+        <KpiCard
+          title="Sales"
+          value={fmt.peso(summary.totalRevenue)}
+          subtext={summaryLoading ? 'Loading…' : `${summary.label.toLowerCase()} · ${summary.totalTransactions} transaction${summary.totalTransactions === 1 ? '' : 's'}`}
+          icon={<Banknote className="w-5 h-5" />}
           onClick={() => onNavigate('payments-history')}
         />
-        <KpiCard 
-          title="Cash Collected" 
-          value={fmt.peso(todayCash)} 
-          subtext={`${todayPayments.filter(p=>p.method==='cash').length} transactions`} 
-          icon={<Banknote className="w-5 h-5" />} 
+        <KpiCard
+          title="Cash Collected"
+          value={fmt.peso(periodCash)}
+          subtext={periodCollected > 0 ? `${Math.round((periodCash / periodCollected) * 100)}% of collections` : 'No collections yet'}
+          icon={<Banknote className="w-5 h-5" />}
           onClick={() => onNavigate('payments-history')}
         />
-        <KpiCard 
-          title="GCash Collected" 
-          value={fmt.peso(todayGCash)} 
-          subtext={`${todayPayments.filter(p=>p.method==='gcash').length} transactions`} 
-          icon={<CreditCard className="w-5 h-5" />} 
+        <KpiCard
+          title="GCash Collected"
+          value={fmt.peso(periodGCash)}
+          subtext={periodCollected > 0 ? `${Math.round((periodGCash / periodCollected) * 100)}% of collections` : 'No collections yet'}
+          icon={<CreditCard className="w-5 h-5" />}
           onClick={() => onNavigate('payments-history')}
         />
-        <KpiCard 
-          title="Today's Transactions" 
-          value={`${todayLaundry.length + todayWater.length}`} 
-          subtext={`${todayLaundry.length} laundry · ${todayWater.length} water`} 
-          icon={<Receipt className="w-5 h-5" />} 
+        <KpiCard
+          title="Transactions"
+          value={`${summary.totalTransactions}`}
+          subtext={`${summary.laundryCount} laundry · ${summary.waterCount} water`}
+          icon={<Receipt className="w-5 h-5" />}
         />
       </div>
 
@@ -120,7 +173,10 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
                 </div>
               </CardHeader>
               <CardBody className="flex-1 pt-2">
-                <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 250 : window.innerWidth < 1024 ? 300 : 380}>
+                {/* Height comes from CSS so the chart follows a window resize;
+                    a one-off window.innerWidth read never updates. */}
+                <div className="h-[250px] sm:h-[300px] lg:h-[380px]">
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dailyRevenue} barSize={24} barGap={4}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} dy={10} />
@@ -130,6 +186,7 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
                     <Bar dataKey="gcashSales" name="GCash" fill="#cbd5e1" radius={[4,4,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
+                </div>
               </CardBody>
             </Card>
           </div>
@@ -151,7 +208,7 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
                 <div className="flex-1 flex items-center justify-center py-8 text-center text-slate-500 text-sm">No orders waiting for pickup.</div>
               ) : (
                 <div className="space-y-1.5">
-                  {laundryOrders.filter(o => o.status === 'ready').slice(0, 6).map(o => (
+                  {readyOrders.slice(0, 6).map(o => (
                     <div key={o.id} onClick={() => onNavigate('laundry-orders')}
                       className="flex items-center justify-between py-2.5 px-3 bg-amber-50/50 rounded-lg border border-amber-100 transition-smooth hover:border-amber-200 hover:shadow-sm cursor-pointer">
                       <div>
@@ -196,7 +253,9 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
             </Tr>
           </Thead>
           <Tbody>
-            {recentTransactions.length === 0 ? (
+            {snapshotLoading ? (
+              <Tr><Td colSpan={8} align="center"><span className="text-slate-500 py-6 block">Loading transactions…</span></Td></Tr>
+            ) : recentTransactions.length === 0 ? (
               <Tr><Td colSpan={8} align="center"><span className="text-slate-500">No transactions recorded today.</span></Td></Tr>
             ) : recentTransactions.map(t => (
               <Tr key={t.id}>
