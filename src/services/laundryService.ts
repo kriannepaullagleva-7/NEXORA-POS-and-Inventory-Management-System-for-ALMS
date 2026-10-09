@@ -8,7 +8,7 @@ import type {
   LaundryStatus,
 } from '../types/database';
 import type { LaundryAddon, LaundryOrder } from '../types/models';
-import { describeError, nextId, toPaymentMethod, unwrap, today } from './helpers';
+import { describeError, fetchAllRows, nextId, toPaymentMethod, unwrap, today } from './helpers';
 
 type OrderWithLines = LaundryOrderRow & {
   laundry_order_services: (LaundryOrderServiceRow & { laundry_services: Pick<LaundryServiceRow, 'name' | 'unit'> | null })[];
@@ -77,9 +77,11 @@ export interface CreateLaundryOrderInput {
 
 export const laundryService = {
   async listOrders(): Promise<LaundryOrder[]> {
-    const rows = unwrap(
-      await supabase.from('laundry_orders').select(ORDER_SELECT).order('date', { ascending: false }).order('id', { ascending: false })
-    ) as OrderWithLines[];
+    const rows = await fetchAllRows<OrderWithLines>((from, to) =>
+      supabase.from('laundry_orders').select(ORDER_SELECT)
+        .order('date', { ascending: false }).order('id', { ascending: false })
+        .range(from, to)
+    );
     return rows.map(toOrder);
   },
 

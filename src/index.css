@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 
 @keyframes slideInUp {
@@ -60,7 +60,7 @@
   --ring: #93c5fd;
   --radius: 8px;
   --font-outfit: 'Outfit', system-ui, sans-serif;
-  --font-jetbrains: 'JetBrains Mono', 'Courier New', monospace;
+  --font-numeric: 'Roboto Mono', 'Courier New', monospace;
 
   /* Sidebar */
   --sidebar-bg: #0f172a;
@@ -123,18 +123,16 @@ body {
 }
 
 .font-mono {
-  font-family: var(--font-jetbrains);
-  /* JetBrains Mono ships a dotted zero by default; "zero" 0 turns that off so 0
-     renders as a plain oval. tabular-nums keeps digits column-aligned so
-     amounts line up down a table. */
-  font-feature-settings: "zero" 0;
+  /* Roboto Mono's zero is a plain oval — no center dot or slash — unlike
+     JetBrains Mono, so no font-feature override is needed to fix it.
+     tabular-nums keeps digits column-aligned so amounts line up down a table. */
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
 }
 
 /* Every figure in the app — KPI values and table cells alike — uses this. */
 .num {
-  font-family: var(--font-jetbrains);
-  font-feature-settings: "zero" 0;
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
 }
 
@@ -389,8 +387,13 @@ body {
   button { min-height: 48px !important; padding: 0.75rem !important; }
   .interactive { margin: 0.5rem !important; }
 
-  /* Larger touch targets */
-  input, select, textarea { min-height: 48px !important; padding: 0.75rem !important; }
+  /* Larger touch targets. Only the vertical padding is forced here —
+     earlier this set all four sides via `padding: 0.75rem !important`,
+     which clobbered every icon-aware `pl-9`/`pl-10`/`pl-11` an input set
+     for its own left icon (SearchBar and every <Input icon=.../>), pulling
+     the text back under the icon on every touch device — this system's
+     actual target hardware. Horizontal padding stays with each component. */
+  input, select, textarea { min-height: 48px !important; padding-top: 0.75rem !important; padding-bottom: 0.75rem !important; }
 
   /* Disable hover effects on touch devices, use active instead */
   button:active { transform: scale(0.98); }

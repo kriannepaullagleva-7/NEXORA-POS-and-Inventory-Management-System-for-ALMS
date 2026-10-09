@@ -19,11 +19,14 @@ import {
   Input,
   Textarea,
   SearchBar,
+  PeriodFilter,
+  ExportDialog,
   useToast,
   KpiCard
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
-import { printReceipt } from '../utils/pdf';
+import { printReceipt, exportReportPdf } from '../utils/pdf';
+import { resolveReportRange, withinReportRange, type ReportPeriod } from '../utils/reportPeriod';
 import { useAsync } from '../hooks/useAsync';
 import { waterService } from '../services/waterService';
 import { pricingService, calcDeliveryFee, describeDeliveryFee } from '../services/pricingService';
@@ -47,7 +50,8 @@ import {
   AlertCircle,
   ReceiptText,
   XCircle,
-  ImageOff
+  ImageOff,
+  Download
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -65,9 +69,14 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const toast = useToast();
   const { data: waterSales, loading, error } = useAsync(() => waterService.listSales(), []);
   const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState('today');
+  const [period, setPeriod] = useState<ReportPeriod>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [showExport, setShowExport] = useState(false);
   const [viewSale, setViewSale] = useState<WaterSale | null>(null);
   const [confirmReprint, setConfirmReprint] = useState(false);
+
+  const range = resolveReportRange(period, { from: customFrom, to: customTo });
 
   const reprintReceipt = (sale: any) => {
     printReceipt({
@@ -101,8 +110,28 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const filtered = waterSales.filter(s =>
     matchesQuery(search, s.id, s.date, s.customerName, s.phone, s.address, s.total,
       s.paymentMethod, s.paymentStatus, s.gcashRef, s.processedBy,
-      s.delivery ? 'delivery' : 'walk-in pickup', s.items.map(i => i.name))
+      s.delivery ? 'delivery' : 'walk-in pickup', s.items.map(i => i.name)) &&
+    withinReportRange(s.date, range)
   );
+
+  const handleExport = () => {
+    if (filtered.length === 0) { toast.error('No records to export for the current filters.'); return; }
+    const totals = filtered.reduce((s, sale) => ({ total: s.total + sale.total, delivery: s.delivery + sale.deliveryFee }), { total: 0, delivery: 0 });
+    exportReportPdf({
+      reportTitle: 'Water Refilling Sales History',
+      period: range.label,
+      filtersLabel: search ? `Search: "${search}"` : undefined,
+      columns: ['Transaction ID', 'Customer', 'Date', 'Items', 'Delivery Fee', 'Total', 'Method', 'Type', 'Processed By'],
+      rows: filtered.map(s => [
+        s.id, s.customerName, fmt.date(s.date), s.items.map(i => `${i.qty}x ${i.name}`).join(', '),
+        s.deliveryFee > 0 ? fmt.peso(s.deliveryFee) : '—', fmt.peso(s.total),
+        s.paymentMethod ? s.paymentMethod.toUpperCase() : '—', s.delivery ? 'Delivery' : 'Walk-in', s.processedBy,
+      ]),
+      totalsRow: ['', '', '', 'TOTAL', fmt.peso(totals.delivery), fmt.peso(totals.total), '', '', ''],
+      fileName: `ALMS_Water_Sales_History_${range.label.replace(/\s+/g, '_')}.pdf`,
+    });
+    toast.success('Water Refilling Sales History exported.');
+  };
 
   const methodBadge = (method: string) => {
     if (method === 'gcash') return <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Smartphone className="w-3 h-3" /> GCASH</span>;
@@ -112,11 +141,14 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Water Refilling" subtitle="Sales, deliveries, and inventory tracking"
+      <PageHeader title="Water Refilling" subtitle={`${range.label} — sales, deliveries, and inventory tracking`}
         actions={
-          <Button onClick={() => onNavigate('water-new')} icon={<Plus className="w-4 h-4" />}>
-            New Sale
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setShowExport(true)} icon={<Download className="w-4 h-4" />}>Export PDF</Button>
+            <Button onClick={() => onNavigate('water-new')} icon={<Plus className="w-4 h-4" />}>
+              New Sale
+            </Button>
+          </>
         } />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -130,13 +162,8 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <SearchBar value={search} onChange={setSearch} placeholder="Search sales by ID, date, customer, phone, amount, method or status…" className="w-full sm:w-80" />
-            <select value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white">
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="all">All Time</option>
-            </select>
+            <PeriodFilter period={period} onPeriodChange={setPeriod} customFrom={customFrom} customTo={customTo}
+              onCustomChange={(f, t) => { setCustomFrom(f); setCustomTo(t); }} />
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
           </div>
         </CardHeader>
@@ -276,6 +303,16 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         title="Reprint Receipt?"
         message={`Generate an 80mm receipt PDF for transaction ${viewSale?.id ?? ''}.`}
         confirmLabel="Reprint Receipt"
+      />
+
+      <ExportDialog
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        onConfirm={handleExport}
+        title="Export Water Sales History?"
+        reportTitle="Water Refilling Sales History"
+        period={range.label}
+        rowCount={filtered.length}
       />
     </div>
   );

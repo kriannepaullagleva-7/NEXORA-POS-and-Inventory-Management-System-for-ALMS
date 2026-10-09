@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, Search, X, CheckCircle2, AlertCircle, Info, XCircle, FileText, Pencil, Trash2 } from 'lucide-react';
+import { REPORT_PERIOD_OPTIONS, type ReportPeriod } from '../../utils/reportPeriod';
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
 type BadgeVariant =
@@ -466,6 +467,58 @@ export function SearchBar({ value, onChange, placeholder = 'Search...', classNam
         placeholder={placeholder}
         className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 outline-none transition-smooth hover:border-slate-300 hover:shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:shadow-md"
       />
+    </div>
+  );
+}
+
+// ─── Report Period Filter ───────────────────────────────────────────────────
+// Shared across the Payment Ledger, Laundry Sales History, and Water
+// Refilling Sales History pages so the nine filter options (Today …
+// All Records) and the custom-range pickers look and behave the same way
+// everywhere they appear.
+export function PeriodFilter({
+  period, onPeriodChange, customFrom, customTo, onCustomChange, className = '',
+}: {
+  period: ReportPeriod;
+  onPeriodChange: (p: ReportPeriod) => void;
+  customFrom: string;
+  customTo: string;
+  onCustomChange: (from: string, to: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+      <select
+        value={period}
+        onChange={e => onPeriodChange(e.target.value as ReportPeriod)}
+        aria-label="Report period"
+        className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white text-slate-700 font-medium transition-smooth hover:border-slate-300"
+      >
+        {REPORT_PERIOD_OPTIONS.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      {period === 'custom' && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={customFrom}
+            max={customTo || undefined}
+            onChange={e => onCustomChange(e.target.value, customTo)}
+            aria-label="From date"
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:border-blue-400 bg-white text-slate-700"
+          />
+          <span className="text-slate-400 text-xs">to</span>
+          <input
+            type="date"
+            value={customTo}
+            min={customFrom || undefined}
+            onChange={e => onCustomChange(customFrom, e.target.value)}
+            aria-label="To date"
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:border-blue-400 bg-white text-slate-700"
+          />
+        </div>
+      )}
     </div>
   );
 }

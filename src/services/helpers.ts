@@ -24,6 +24,32 @@ export function unwrap<T>(result: { data: T | null; error: PostgrestError | null
 }
 
 /**
+ * Fetches every row a query matches, not just PostgREST's default first 1000.
+ *
+ * Same pitfall the bi_* functions (migration 003) exist to avoid on the
+ * reports side: a plain `.select()` silently stops at 1000 rows once a table
+ * passes that size, with nothing on screen to say so. History/ledger pages
+ * that list every payment, laundry order or water sale — and PDF exports
+ * built from them — need the real, complete set, so this pages through with
+ * `.range()` until a page comes back short.
+ */
+export async function fetchAllRows<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: PostgrestError | null }>
+): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await build(from, from + PAGE - 1);
+    if (error) throw new Error(describeError(error));
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < PAGE) return all;
+    from += PAGE;
+  }
+}
+
+/**
  * Next sequential human-readable id for tables that use text primary keys
  * (e.g. `LAU-0049`). Reads the highest existing id with the given prefix.
  */

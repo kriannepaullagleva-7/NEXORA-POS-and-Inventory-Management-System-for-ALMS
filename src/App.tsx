@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { ToastContainer } from './components/ui';
@@ -18,32 +19,43 @@ import FinancePage from './pages/FinancePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ProfilePage from './pages/ProfilePage';
 
+// Pure — no closure over component state — so it can live outside AppRoutes
+// and never changes identity across renders.
+const mapPageToPath = (page: PageId): string => {
+  const map: Record<PageId, string> = {
+    dashboard: '/dashboard',
+    users: '/users', employees: '/users/employees', roles: '/users/roles', 'activity-logs': '/users/activity-logs',
+    laundry: '/laundry/orders', 'laundry-new': '/laundry/new', 'laundry-orders': '/laundry/orders', 'laundry-history': '/laundry/history', 'laundry-services': '/laundry/services',
+    water: '/water/new', 'water-new': '/water/new', 'water-history': '/water/history', 'water-products': '/water/products',
+    payments: '/payments/new', 'payments-new': '/payments/new', 'payments-history': '/payments/history',
+    inventory: '/inventory/items', 'inventory-products': '/inventory/products', 'inventory-items': '/inventory/items', 'inventory-stock': '/inventory/stock', 'inventory-suppliers': '/inventory/suppliers', 'inventory-purchase': '/inventory/purchase',
+    finance: '/finance/reports', 'finance-expenses': '/finance/expenses', 'finance-reports': '/finance/reports',
+    analytics: '/analytics',
+    settings: '/settings', profile: '/profile', 'change-password': '/change-password'
+  };
+  return map[page] ?? '/dashboard';
+};
+
 function AppRoutes() {
   const { auth, initializing } = useAuth();
   const navigate = useNavigate();
 
-  const mapPageToPath = (page: PageId): string => {
-    const map: Record<PageId, string> = {
-      dashboard: '/dashboard',
-      users: '/users', employees: '/users/employees', roles: '/users/roles', 'activity-logs': '/users/activity-logs',
-      laundry: '/laundry/orders', 'laundry-new': '/laundry/new', 'laundry-orders': '/laundry/orders', 'laundry-history': '/laundry/history', 'laundry-services': '/laundry/services',
-      water: '/water/new', 'water-new': '/water/new', 'water-history': '/water/history', 'water-products': '/water/products',
-      payments: '/payments/new', 'payments-new': '/payments/new', 'payments-history': '/payments/history',
-      inventory: '/inventory/items', 'inventory-products': '/inventory/products', 'inventory-items': '/inventory/items', 'inventory-stock': '/inventory/stock', 'inventory-suppliers': '/inventory/suppliers', 'inventory-purchase': '/inventory/purchase',
-      finance: '/finance/reports', 'finance-expenses': '/finance/expenses', 'finance-reports': '/finance/reports',
-      analytics: '/analytics',
-      settings: '/settings', profile: '/profile', 'change-password': '/change-password'
-    };
-    return map[page] ?? '/dashboard';
-  };
-  
-  // Create a wrapper component for routes that need auth data
-  const AuthRoute = ({ component: Component, adminOnly = false, subPage, ...props }: any) => {
-    if (!auth) return <Navigate to="/login" replace />;
-    if (adminOnly && auth.role !== 'admin') return <Navigate to="/dashboard" replace />; // or AccessDenied
-    
-    return <Component subPage={subPage} userName={auth.name} userRole={auth.role} onNavigate={(p: PageId) => navigate(mapPageToPath(p))} {...props} />;
-  };
+  // Memoized so its identity is stable across renders that don't actually
+  // change auth or navigate (e.g. every searchParams/location update). Before
+  // this, AuthRoute was redefined inline on every AppRoutes render, so React
+  // saw a different element `type` for every routed page on every navigation
+  // and unmounted + remounted it — silently discarding any state a page had
+  // just set in the same tick (e.g. a modal opened by an effect that also
+  // updates the URL, such as InventoryPage's "Create PO" deep link).
+  const AuthRoute = useCallback(
+    ({ component: Component, adminOnly = false, subPage, ...props }: any) => {
+      if (!auth) return <Navigate to="/login" replace />;
+      if (adminOnly && auth.role !== 'admin') return <Navigate to="/dashboard" replace />; // or AccessDenied
+
+      return <Component subPage={subPage} userName={auth.name} userRole={auth.role} onNavigate={(p: PageId) => navigate(mapPageToPath(p))} {...props} />;
+    },
+    [auth, navigate]
+  );
 
   // Wait for the stored Supabase session before deciding where to send the user,
   // otherwise a refresh on any page bounces to /login for a moment.

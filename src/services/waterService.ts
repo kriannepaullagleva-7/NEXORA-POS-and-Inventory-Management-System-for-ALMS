@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { WaterProductRow, WaterTransactionItemRow, WaterTransactionRow } from '../types/database';
 import type { WaterSale } from '../types/models';
-import { describeError, nextId, toPaymentMethod, unwrap, today } from './helpers';
+import { describeError, fetchAllRows, nextId, toPaymentMethod, unwrap, today } from './helpers';
 
 type TxWithItems = WaterTransactionRow & {
   water_transaction_items: (WaterTransactionItemRow & { water_products: Pick<WaterProductRow, 'name'> | null })[];
@@ -63,9 +63,11 @@ export interface CreateWaterSaleInput {
 
 export const waterService = {
   async listSales(): Promise<WaterSale[]> {
-    const rows = unwrap(
-      await supabase.from('water_transactions').select(TX_SELECT).order('date', { ascending: false }).order('id', { ascending: false })
-    ) as TxWithItems[];
+    const rows = await fetchAllRows<TxWithItems>((from, to) =>
+      supabase.from('water_transactions').select(TX_SELECT)
+        .order('date', { ascending: false }).order('id', { ascending: false })
+        .range(from, to)
+    );
     return rows.map(toSale);
   },
 

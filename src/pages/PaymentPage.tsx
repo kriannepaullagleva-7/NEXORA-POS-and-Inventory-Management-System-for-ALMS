@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
-  Modal, Confirm, Input, Select, Textarea, SearchBar, useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr, RowActions, ViewAction
+  Modal, Confirm, Input, Select, Textarea, SearchBar, PeriodFilter, ExportDialog,
+  useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr, RowActions, ViewAction
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { matchesQuery } from '../utils/search';
-import { printReceipt } from '../utils/pdf';
+import { printReceipt, exportReportPdf } from '../utils/pdf';
+import { resolveReportRange, withinReportRange, type ReportPeriod } from '../utils/reportPeriod';
 import { useAsync } from '../hooks/useAsync';
 import { paymentService } from '../services/paymentService';
 import { laundryService } from '../services/laundryService';
@@ -19,7 +21,8 @@ import {
   Smartphone,
   ReceiptText,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 import type { PageId } from '../components/Layout';
 
@@ -38,8 +41,14 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [methodFilter, setMethodFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [period, setPeriod] = useState<ReportPeriod>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [viewPayment, setViewPayment] = useState<any>(null);
   const [confirmPrint, setConfirmPrint] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+
+  const range = resolveReportRange(period, { from: customFrom, to: customTo });
 
   const printPaymentReceipt = (pay: any) => {
     printReceipt({
@@ -76,8 +85,32 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
     const matchMethod = methodFilter === 'all' || p.method === methodFilter || (methodFilter === 'unpaid' && p.method === 'unpaid');
     const matchType = typeFilter === 'all' || p.type === typeFilter;
     const matchStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchSearch && matchMethod && matchType && matchStatus;
+    const matchPeriod = withinReportRange(p.date, range);
+    return matchSearch && matchMethod && matchType && matchStatus && matchPeriod;
   });
+
+  const handleExport = () => {
+    if (filtered.length === 0) { toast.error('No records to export for the current filters.'); return; }
+    const totals = filtered.reduce((s, p) => ({ amount: s.amount + p.amount, received: s.received + p.amtReceived, balance: s.balance + p.balance }), { amount: 0, received: 0, balance: 0 });
+    exportReportPdf({
+      reportTitle: 'Payment Ledger',
+      period: range.label,
+      filtersLabel: [
+        methodFilter !== 'all' ? `Method: ${methodFilter}` : null,
+        typeFilter !== 'all' ? `Type: ${typeFilter}` : null,
+        statusFilter !== 'all' ? `Status: ${statusFilter}` : null,
+        search ? `Search: "${search}"` : null,
+      ].filter(Boolean).join(' · ') || undefined,
+      columns: ['Transaction ID', 'Customer', 'Type', 'Amount', 'Received', 'Balance', 'Method', 'Status', 'Date'],
+      rows: filtered.map(p => [
+        p.id, p.customerName || 'Walk-in', p.type, fmt.peso(p.amount), fmt.peso(p.amtReceived),
+        p.balance > 0 ? fmt.peso(p.balance) : '—', p.method.toUpperCase(), p.status.toUpperCase(), fmt.datetime(p.date),
+      ]),
+      totalsRow: ['', '', 'TOTAL', fmt.peso(totals.amount), fmt.peso(totals.received), fmt.peso(totals.balance), '', '', ''],
+      fileName: `ALMS_Payment_Ledger_${range.label.replace(/\s+/g, '_')}.pdf`,
+    });
+    toast.success('Payment Ledger exported.');
+  };
 
   const methodBadge = (method: string) => {
     if (method === 'gcash') return <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Smartphone className="w-3 h-3" /> GCASH</span>;
@@ -87,11 +120,14 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payment Ledger" subtitle="Complete transaction trail — Cash, GCash, and Debt"
+      <PageHeader title="Payment Ledger" subtitle={`${range.label} — Cash, GCash, and Debt`}
         actions={
-          <Button onClick={() => onNavigate('payments-new')} icon={<Plus className="w-4 h-4" />}>
-            Record Payment or Debt
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setShowExport(true)} icon={<Download className="w-4 h-4" />}>Export PDF</Button>
+            <Button onClick={() => onNavigate('payments-new')} icon={<Plus className="w-4 h-4" />}>
+              Record Payment or Debt
+            </Button>
+          </>
         } />
 
       {/* KPI Strip */}
@@ -111,7 +147,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <SearchBar value={search} onChange={setSearch} placeholder="Search payment, order, customer, method, status…" className="w-full sm:w-80" />
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
               <Select options={[
                 { label: 'All Payments', value: 'all' }, { label: 'Cash', value: 'cash' }, { label: 'GCash', value: 'gcash' }, { label: 'Unpaid / Debt', value: 'unpaid' }
               ]} value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="w-36" />
@@ -121,8 +157,10 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               <Select options={[
                 { label: 'All Statuses', value: 'all' }, { label: 'Paid', value: 'paid' }, { label: 'Partial', value: 'partial' }, { label: 'Debt', value: 'unpaid' }
               ]} value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-36" />
+              <PeriodFilter period={period} onPeriodChange={setPeriod} customFrom={customFrom} customTo={customTo}
+                onCustomChange={(f, t) => { setCustomFrom(f); setCustomTo(t); }} />
             </div>
-            <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
+            <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{range.label} · {filtered.length} records</span>
           </div>
         </CardHeader>
         <Table maxHeight={320}>
@@ -253,6 +291,17 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         title="Print Receipt?"
         message={`Generate an 80mm receipt PDF for transaction ${viewPayment?.id ?? ''}.`}
         confirmLabel="Print Receipt"
+      />
+
+      <ExportDialog
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        onConfirm={handleExport}
+        title="Export Payment Ledger?"
+        reportTitle="Payment Ledger"
+        period={range.label}
+        filters={[methodFilter !== 'all' ? methodFilter : null, typeFilter !== 'all' ? typeFilter : null, statusFilter !== 'all' ? statusFilter : null].filter(Boolean).join(', ') || 'None'}
+        rowCount={filtered.length}
       />
     </div>
   );

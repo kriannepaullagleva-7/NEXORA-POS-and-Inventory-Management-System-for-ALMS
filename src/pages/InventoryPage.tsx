@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { today } from '../services/helpers';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
@@ -583,6 +584,7 @@ const emptySupplierForm = { name: '', contactPerson: '', phone: '', email: '', a
 
 function SuppliersPage() {
   const { suppliers, loading, refresh } = useInventory();
+  const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
   const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
@@ -721,13 +723,23 @@ function SuppliersPage() {
                 </div>
               </div>
               
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
                 <Badge variant={sup.status === 'active' ? 'active' : 'inactive'}>{sup.status === 'active' ? 'Active' : 'Inactive'}</Badge>
-                <RowActions>
-                  <ViewAction onClick={() => setViewSupplier(sup)} title="View supplier" />
-                  <EditAction onClick={() => openEdit(sup)} title="Edit supplier" />
-                  <DeleteAction onClick={() => setDeleteSupplier(sup)} title="Delete supplier" />
-                </RowActions>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="xs" variant="outline"
+                    onClick={() => navigate(`/inventory/purchase?supplier=${encodeURIComponent(sup.id)}`)}
+                    icon={<FilePlus className="w-3.5 h-3.5" />}
+                    title={`Create purchase order for ${sup.name}`}
+                  >
+                    Create PO
+                  </Button>
+                  <RowActions>
+                    <ViewAction onClick={() => setViewSupplier(sup)} title="View supplier" />
+                    <EditAction onClick={() => openEdit(sup)} title="Edit supplier" />
+                    <DeleteAction onClick={() => setDeleteSupplier(sup)} title="Delete supplier" />
+                  </RowActions>
+                </div>
               </div>
             </CardBody>
           </Card>
@@ -799,6 +811,7 @@ function PurchaseOrdersPage() {
   const { data: purchaseOrders, loading, error, reload } = useAsync(() => inventoryService.listPurchaseOrders(), []);
   const { suppliers, items, refresh: refreshInventory } = useInventory();
   const { employee } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(false);
   const [viewPO, setViewPO] = useState<any>(null);
   const [confirmPrintPO, setConfirmPrintPO] = useState(false);
@@ -806,6 +819,18 @@ function PurchaseOrdersPage() {
   const [poForm, setPoForm] = useState({ supplierId: '', expectedDelivery: '', notes: '' });
   const [poLines, setPoLines] = useState<PoLine[]>([]);
   const toast = useToast();
+
+  // Arrived from a supplier card's "Create PO" button — open the form
+  // pre-associated with that supplier, then drop the query param so a
+  // refresh or Back doesn't reopen it.
+  useEffect(() => {
+    const supplierId = searchParams.get('supplier');
+    if (!supplierId || suppliers.length === 0) return;
+    if (!suppliers.some(s => s.id === supplierId)) return;
+    setPoForm(p => ({ ...p, supplierId }));
+    setShowCreate(true);
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('supplier'); return next; }, { replace: true });
+  }, [searchParams, suppliers, setSearchParams]);
 
   const addPoLine = () => setPoLines(prev => [...prev, { itemId: '', qty: '1', unitCost: '' }]);
   const removePoLine = (index: number) => setPoLines(prev => prev.filter((_, i) => i !== index));

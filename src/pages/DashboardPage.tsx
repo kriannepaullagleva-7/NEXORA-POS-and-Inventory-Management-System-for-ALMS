@@ -158,7 +158,7 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5 md:gap-6">
         {/* Revenue Chart */}
-        <div className={`lg:col-span-3 flex flex-col ${userRole !== 'admin' ? 'order-last lg:order-last' : ''}`}>
+        <div className={`${readyCount > 0 ? 'lg:col-span-3' : 'lg:col-span-5'} flex flex-col ${userRole !== 'admin' ? 'order-last lg:order-last' : ''}`}>
             <Card className="flex-1 flex flex-col">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -191,22 +191,20 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
             </Card>
           </div>
 
-        {/* Action Center */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          <Card className="flex-1 flex flex-col">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-slate-900 tracking-tight flex items-center gap-2">
-                  <BellRing className="w-4 h-4 text-amber-600" />
-                  Ready for Pickup{readyCount > 0 ? ` · ${readyCount} orders` : ''}
-                </h3>
-                <button onClick={() => onNavigate('laundry-orders')} className="text-xs text-blue-600 font-medium hover:underline">View tracker</button>
-              </div>
-            </CardHeader>
-            <CardBody className="flex-1">
-              {readyCount === 0 ? (
-                <div className="flex-1 flex items-center justify-center py-8 text-center text-slate-500 text-sm">No orders waiting for pickup.</div>
-              ) : (
+        {/* Action Center — hidden entirely when there is nothing ready for pickup */}
+        {readyCount > 0 && (
+          <div className="lg:col-span-2 flex flex-col gap-4">
+            <Card className="flex-1 flex flex-col">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-900 tracking-tight flex items-center gap-2">
+                    <BellRing className="w-4 h-4 text-amber-600" />
+                    Ready for Pickup · {readyCount} orders
+                  </h3>
+                  <button onClick={() => onNavigate('laundry-orders')} className="text-xs text-blue-600 font-medium hover:underline">View tracker</button>
+                </div>
+              </CardHeader>
+              <CardBody className="flex-1">
                 <div className="space-y-1.5">
                   {readyOrders.slice(0, 6).map(o => (
                     <div key={o.id} onClick={() => onNavigate('laundry-orders')}
@@ -219,10 +217,10 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
                     </div>
                   ))}
                 </div>
-              )}
-            </CardBody>
-          </Card>
-        </div>
+              </CardBody>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Recent Transactions */}

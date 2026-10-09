@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { PaymentRow } from '../types/database';
 import type { Payment } from '../types/models';
-import { describeError, nextId, toPaymentMethod, unwrap, today } from './helpers';
+import { describeError, fetchAllRows, nextId, toPaymentMethod, unwrap, today } from './helpers';
 
 function toPayment(row: PaymentRow): Payment {
   return {
@@ -42,9 +42,11 @@ export interface CreatePaymentInput {
 
 export const paymentService = {
   async list(): Promise<Payment[]> {
-    const rows = unwrap(
-      await supabase.from('payments').select('*').order('payment_date', { ascending: false }).order('id', { ascending: false })
-    ) as PaymentRow[];
+    const rows = await fetchAllRows<PaymentRow>((from, to) =>
+      supabase.from('payments').select('*')
+        .order('payment_date', { ascending: false }).order('id', { ascending: false })
+        .range(from, to)
+    );
     return rows.map(toPayment);
   },
 

@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import logo from '../assets/logo.png';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useInventory } from '../context/DataContext';
+import { useAsync } from '../hooks/useAsync';
+import { notificationService, type AppNotification } from '../services/notificationService';
+import { fmt } from '../utils/formatters';
 import { Confirm } from './ui';
 import { Avatar } from './Avatar';
 import {
@@ -117,15 +120,8 @@ const pageTitle: Record<string, string> = {
   '/users/activity-logs': 'System Logs',
 };
 
-const initialNotifications = [
-  { id: 'n-1', title: 'Laundry Ready', desc: 'Order #LAU-0042 is ready for pickup.', time: '10 mins ago' },
-  { id: 'n-2', title: 'Payment Received', desc: '₱500 Cash payment recorded for Water.', time: '2 hours ago' },
-  { id: 'n-3', title: 'Stock Updated', desc: '20L Gallon inventory replenished (+50).', time: '1 day ago' },
-];
-const initialReadIds = new Set(['n-2', 'n-3']);
-
 export default function Layout() {
-  const { auth, logout } = useAuth();
+  const { auth, employee, logout } = useAuth();
   const { lowStockItems } = useInventory();
   const location = useLocation();
   const navigate = useNavigate();
@@ -141,16 +137,52 @@ export default function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set(initialReadIds));
 
-  const stockNotifications = useMemo(() => lowStockItems.map(item => ({
-    id: `stock-${item.id}`,
+  // Real, live sources — never fabricated. See notificationService for why
+  // these are computed on each load rather than stored as an event log.
+  const { data: remoteNotifications } = useAsync<AppNotification[]>(
+    () => Promise.all([
+      notificationService.readyForPickup(),
+      notificationService.unpaidDebts(),
+      notificationService.pendingPurchaseOrders(),
+    ]).then(([ready, debts, pos]) => [...ready, ...debts, ...pos]),
+    [],
+    [auth?.employeeId]
+  );
+
+  const stockNotifications = useMemo<AppNotification[]>(() => lowStockItems.map(item => ({
+    key: `stock-${item.id}`,
     title: item.status === 'critical' ? 'Critical Stock' : 'Low Stock',
     desc: `${item.name} — ${item.currentQty} ${item.unit} left (reorder at ${item.reorderLevel}).`,
     time: 'Live',
+    path: '/inventory/items',
   })), [lowStockItems]);
 
-  const notifications = useMemo(() => [...stockNotifications, ...initialNotifications], [stockNotifications]);
+  const notifications = useMemo(
+    () => [...stockNotifications, ...remoteNotifications],
+    [stockNotifications, remoteNotifications]
+  );
+
+  // Read/unread state persists per employee in Supabase (notification_reads),
+  // not in local state, so it survives a refresh and is the same on every
+  // device that employee signs into.
+  const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!employee?.id) { setReadKeys(new Set()); return; }
+    let active = true;
+    notificationService.readKeys(employee.id)
+      .then(keys => { if (active) setReadKeys(keys); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [employee?.id]);
+
+  const openNotification = useCallback((n: AppNotification) => {
+    setNotifOpen(false);
+    navigate(n.path);
+    if (!employee?.id || readKeys.has(n.key)) return;
+    setReadKeys(prev => new Set(prev).add(n.key));
+    notificationService.markRead(employee.id, n.key).catch(() => undefined);
+  }, [employee?.id, readKeys, navigate]);
 
   useEffect(() => {
     navItems.forEach(item => {
@@ -192,11 +224,13 @@ export default function Layout() {
   const filteredNav = navItems
     .filter(item => !item.adminOnly || userRole === 'admin')
     .map(item => ({ ...item, children: item.children?.filter(c => !c.adminOnly || userRole === 'admin') }));
-  const unreadCount = notifications.filter(n => !readIds.has(n.id)).length;
+  const unreadCount = notifications.filter(n => !readKeys.has(n.key)).length;
 
   const markAllRead = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setReadIds(new Set(notifications.map(n => n.id)));
+    const keys = notifications.map(n => n.key);
+    setReadKeys(new Set(keys));
+    if (employee?.id) notificationService.markAllRead(employee.id, keys).catch(() => undefined);
   };
 
   return (
@@ -326,14 +360,15 @@ export default function Layout() {
                     {notifications.length === 0 ? (
                       <div className="p-6 text-center text-sm text-slate-400">No notifications.</div>
                     ) : notifications.map(n => {
-                      const unread = !readIds.has(n.id);
+                      const unread = !readKeys.has(n.key);
                       return (
-                      <div key={n.id} className={`p-4 border-b border-slate-50 cursor-pointer transition-colors hover:bg-slate-50 ${unread ? 'bg-blue-50/30' : ''}`} onClick={() => setReadIds(prev => new Set(prev).add(n.id))}>
+                      <div key={n.key} className={`p-4 border-b border-slate-50 cursor-pointer transition-colors hover:bg-slate-50 ${unread ? 'bg-blue-50/30' : ''}`} onClick={() => openNotification(n)}>
                         <div className="flex justify-between items-start mb-1">
                           <p className={`text-sm font-semibold ${unread ? 'text-slate-900' : 'text-slate-700'}`}>{n.title}</p>
-                          <p className="text-[10px] text-slate-400 whitespace-nowrap ml-2 mt-0.5">{n.time}</p>
+                          {unread && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 ml-2 mt-1.5" />}
                         </div>
                         <p className={`text-xs ${unread ? 'text-slate-700' : 'text-slate-500'}`}>{n.desc}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{n.time === 'Live' ? 'Live' : fmt.shortDate(n.time)}</p>
                       </div>
                       );
                     })}

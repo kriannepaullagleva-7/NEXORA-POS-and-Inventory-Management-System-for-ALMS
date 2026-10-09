@@ -4,6 +4,8 @@ import { localDate, unwrap } from './helpers';
 export interface DailyRevenuePoint {
   day: string;
   date: string;
+  laundry: number;
+  water: number;
   cashSales: number;
   gcashSales: number;
   total: number;
@@ -180,7 +182,14 @@ export const reportService = {
     const { data, error } = await supabase.rpc('bi_daily_revenue', { p_days: days });
     if (error) throw new Error(error.message);
 
-    return ((data ?? []) as { day: string; cash_sales: number | string; gcash_sales: number | string; total: number | string }[])
+    return ((data ?? []) as {
+      day: string;
+      laundry: number | string;
+      water: number | string;
+      cash_sales: number | string;
+      gcash_sales: number | string;
+      total: number | string;
+    }[])
       .map(row => {
         const date = String(row.day).slice(0, 10);
         // Parse as local midnight so the weekday label matches the date.
@@ -188,6 +197,8 @@ export const reportService = {
         return {
           day: DAYS[new Date(y, (m ?? 1) - 1, d ?? 1).getDay()],
           date,
+          laundry: n(row.laundry),
+          water: n(row.water),
           cashSales: n(row.cash_sales),
           gcashSales: n(row.gcash_sales),
           total: n(row.total),

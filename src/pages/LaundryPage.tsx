@@ -17,6 +17,8 @@ import {
   Input,
   Textarea,
   SearchBar,
+  PeriodFilter,
+  ExportDialog,
   useToast,
   KpiCard,
   RowActions,
@@ -26,7 +28,8 @@ import {
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { matchesQuery } from '../utils/search';
-import { printReceipt } from '../utils/pdf';
+import { printReceipt, exportReportPdf } from '../utils/pdf';
+import { resolveReportRange, withinReportRange, type ReportPeriod } from '../utils/reportPeriod';
 import { useAsync } from '../hooks/useAsync';
 import { laundryService } from '../services/laundryService';
 import { paymentService } from '../services/paymentService';
@@ -52,7 +55,8 @@ import {
   Shirt,
   PlusCircle,
   MinusCircle,
-  XCircle
+  XCircle,
+  Download
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -989,29 +993,56 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
 
 // ─── History Page ─────────────────────────────────────────────────────────────
 function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
+  const [period, setPeriod] = useState<ReportPeriod>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [showExport, setShowExport] = useState(false);
   const { data: orders, loading } = useAsync(() => laundryService.listOrders(), []);
   const completed = orders.filter(o => ['released','cancelled'].includes(o.status));
+  const range = resolveReportRange(period, { from: customFrom, to: customTo });
   const filtered = completed.filter(o =>
     (tab === 'all' || o.status === tab) &&
-    (o.id.toLowerCase().includes(search.toLowerCase()) || o.customerName.toLowerCase().includes(search.toLowerCase()))
+    (o.id.toLowerCase().includes(search.toLowerCase()) || o.customerName.toLowerCase().includes(search.toLowerCase())) &&
+    withinReportRange(o.date, range)
   );
+
+  const handleExport = () => {
+    if (filtered.length === 0) { toast.error('No records to export for the current filters.'); return; }
+    const total = filtered.reduce((s, o) => s + o.total, 0);
+    exportReportPdf({
+      reportTitle: 'Laundry Sales History',
+      period: range.label,
+      filtersLabel: [tab !== 'all' ? `Status: ${tab}` : null, search ? `Search: "${search}"` : null].filter(Boolean).join(' · ') || undefined,
+      columns: ['Order ID', 'Customer', 'Date', 'Services', 'Total', 'Method', 'Payment', 'Status', 'Processed By'],
+      rows: filtered.map(o => [
+        o.id, o.customerName, fmt.date(o.date), o.services.map(s => s.name).join(', '),
+        fmt.peso(o.total), o.paymentMethod ? o.paymentMethod.toUpperCase() : '—',
+        o.paymentStatus.toUpperCase(), o.status.toUpperCase(), o.processedBy,
+      ]),
+      totalsRow: ['', '', '', 'TOTAL', fmt.peso(total), '', '', '', ''],
+      fileName: `ALMS_Laundry_Sales_History_${range.label.replace(/\s+/g, '_')}.pdf`,
+    });
+    toast.success('Laundry Sales History exported.');
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laundry Sales History" subtitle="Completed and cancelled orders"
+      <PageHeader title="Laundry Sales History" subtitle={`${range.label} — completed and cancelled orders`}
         actions={
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowExport(true)} icon={<Download className="w-4 h-4" />}>Export PDF</Button>
             <Button onClick={() => onNavigate('laundry')} variant="outline" icon={<ChevronLeft className="w-4 h-4" />}>
               Back to Tracker
             </Button>
           </div>
         } />
-      
+
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <SearchBar value={search} onChange={setSearch} placeholder="Search orders…" className="w-72" />
             <div className="flex gap-2">
               {['all','released','cancelled'].map(t => (
@@ -1021,6 +1052,8 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
                 </button>
               ))}
             </div>
+            <PeriodFilter period={period} onPeriodChange={setPeriod} customFrom={customFrom} customTo={customTo}
+              onCustomChange={(f, t) => { setCustomFrom(f); setCustomTo(t); }} />
             <span className="text-xs font-medium text-slate-500 ml-auto whitespace-nowrap">{filtered.length} records</span>
           </div>
         </CardHeader>
@@ -1058,6 +1091,17 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
           </Tbody>
         </Table>
       </Card>
+
+      <ExportDialog
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        onConfirm={handleExport}
+        title="Export Laundry Sales History?"
+        reportTitle="Laundry Sales History"
+        period={range.label}
+        filters={tab === 'all' ? 'All statuses' : tab}
+        rowCount={filtered.length}
+      />
     </div>
   );
 }

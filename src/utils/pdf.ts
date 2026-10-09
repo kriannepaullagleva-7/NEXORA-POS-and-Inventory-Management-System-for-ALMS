@@ -5,6 +5,15 @@ import autoTable from 'jspdf-autotable';
 // instead of the peso sign used everywhere else in the UI (`fmt.peso`).
 const pesoPdf = (v: number) => `PHP ${(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Report tables are built from values that already went through fmt.peso() for
+// on-screen display, which uses the real ₱ character. Passed straight through
+// to jsPDF's built-in Helvetica, that glyph doesn't exist and silently renders
+// as "±" (or a tofu box, depending on platform) instead of a peso sign — wrong
+// in every report this function has ever produced. Swapping it for "PHP " here,
+// once, fixes every exported report without every call site having to know
+// about jsPDF's font limitation the way printReceipt's pesoPdf() already does.
+const toPdfCell = (v: string | number): string | number => (typeof v === 'string' ? v.replace(/₱/g, 'PHP ') : v);
+
 const SYSTEM_TITLE = 'POINT OF SALE AND INVENTORY MANAGEMENT SYSTEM';
 
 interface ExportReportOptions {
@@ -34,20 +43,20 @@ export function exportReportPdf(opts: ExportReportOptions) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(20);
-  doc.text(opts.reportTitle, margin, 54);
+  doc.text(String(toPdfCell(opts.reportTitle)), margin, 54);
 
   let y = 72;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(110);
-  if (opts.period) { doc.text(`Period: ${opts.period}`, margin, y); y += 14; }
-  if (opts.filtersLabel) { doc.text(`Filters: ${opts.filtersLabel}`, margin, y); y += 14; }
+  if (opts.period) { doc.text(`Period: ${toPdfCell(opts.period)}`, margin, y); y += 14; }
+  if (opts.filtersLabel) { doc.text(`Filters: ${toPdfCell(opts.filtersLabel)}`, margin, y); y += 14; }
 
   autoTable(doc, {
     startY: y + 4,
-    head: [opts.columns],
-    body: opts.rows,
-    foot: opts.totalsRow ? [opts.totalsRow] : undefined,
+    head: [opts.columns.map(toPdfCell)],
+    body: opts.rows.map(row => row.map(toPdfCell)),
+    foot: opts.totalsRow ? [opts.totalsRow.map(toPdfCell)] : undefined,
     margin: { left: margin, right: margin, bottom: 40 },
     styles: { fontSize: 9, cellPadding: 6, textColor: [30, 41, 59] },
     headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
