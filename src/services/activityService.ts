@@ -21,7 +21,6 @@ export const activityService = {
       employee: row.employees?.name ?? '—',
       action: row.action,
       module: row.module,
-      ip: row.ip_address ?? '',
     }));
   },
 

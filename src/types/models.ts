@@ -200,7 +200,6 @@ export interface ActivityLog {
   employee: string;
   action: string;
   module: string;
-  ip: string;
 }
 
 export interface LaundryAddon {

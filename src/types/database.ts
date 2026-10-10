@@ -199,7 +199,6 @@ export interface ActivityLogRow {
   employee_id: string | null;
   action: string;
   module: string;
-  ip_address: string | null;
   datetime: string;
 }
 

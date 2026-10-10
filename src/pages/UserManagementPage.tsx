@@ -414,16 +414,15 @@ function ActivityLogsPage() {
               <Th>User</Th>
               <Th>Module</Th>
               <Th>Event Description</Th>
-              <Th>IP Address</Th>
             </Tr>
           </Thead>
           <Tbody>
             {loading ? (
-              <Tr><Td colSpan={5} align="center"><span className="text-slate-500 py-6 block">Loading activity…</span></Td></Tr>
+              <Tr><Td colSpan={4} align="center"><span className="text-slate-500 py-6 block">Loading activity…</span></Td></Tr>
             ) : error ? (
-              <Tr><Td colSpan={5} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
+              <Tr><Td colSpan={4} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
             ) : filtered.length === 0 ? (
-              <Tr><Td colSpan={5} align="center"><span className="text-slate-500 py-6 block">No activity recorded yet.</span></Td></Tr>
+              <Tr><Td colSpan={4} align="center"><span className="text-slate-500 py-6 block">No activity recorded yet.</span></Td></Tr>
             ) : filtered.map(log => (
               <Tr key={log.id}>
                 <Td className="font-mono text-xs font-medium text-slate-500">{fmt.datetime(log.datetime)}</Td>
@@ -434,7 +433,6 @@ function ActivityLogsPage() {
                   </span>
                 </Td>
                 <Td className="text-slate-700 text-sm">{log.action}</Td>
-                <Td className="font-mono text-[11px] text-slate-400">{log.ip}</Td>
               </Tr>
             ))}
           </Tbody>
