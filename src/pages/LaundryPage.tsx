@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   Pagination,
   PAGE_SIZE,
+  QuantityInput,
   PageHeader,
   Card,
   CardHeader,
@@ -32,6 +33,7 @@ import { fmt } from '../utils/formatters';
 import { matchesQuery } from '../utils/search';
 import { printReceipt, exportReportPdf } from '../utils/pdf';
 import { resolveReportRange, withinReportRange, type ReportPeriod } from '../utils/reportPeriod';
+import { clampQuantity, formatQuantity, MAX_LINE_QTY, type QuantityRule } from '../utils/quantity';
 import { useAsync } from '../hooks/useAsync';
 import { laundryService } from '../services/laundryService';
 import { paymentService } from '../services/paymentService';
@@ -55,8 +57,6 @@ import {
   Package,
   History,
   Shirt,
-  PlusCircle,
-  MinusCircle,
   XCircle,
   Download
 } from 'lucide-react';
@@ -520,12 +520,35 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
     c.phone.includes(custSearch)
   );
 
-  const addToCart = (svc: any) => {
+  /**
+   * A service billed by weight is rung up in kilos, so it takes fractions; a
+   * load, item or pair is a countable thing and stays whole.
+   */
+  const ruleFor = (svc: any): QuantityRule => ({
+    allowDecimal: svc.type === 'per_kg',
+    max: MAX_LINE_QTY,
+  });
+
+  // Quantity typed on a tile before the line exists. Keyed by service.
+  const [draftQty, setDraftQty] = useState<Record<string, number>>({});
+  const draftFor = (svc: any) => draftQty[svc.id] ?? (svc.type === 'per_kg' ? 1 : 1);
+
+  const addToCart = (svc: any, qty = 1) => {
+    const rule = ruleFor(svc);
     setCart(prev => {
       const ex = prev.find(c => c.svcId === svc.id);
-      if (ex) return prev.map(c => c.svcId === svc.id ? {...c, qty: c.qty + 1, subtotal: (c.qty+1)*c.price} : c);
-      return [...prev, { svcId: svc.id, name: svc.name, price: svc.price, qty: 1, unit: svc.unit, subtotal: svc.price, maxKg: svc.maxKg ?? null }];
+      // Topping up the existing line keeps one row per service.
+      if (ex) {
+        const next = clampQuantity(ex.qty + qty, rule);
+        return prev.map(c => c.svcId === svc.id ? { ...c, qty: next, subtotal: next * c.price } : c);
+      }
+      const next = clampQuantity(qty, rule);
+      return [...prev, {
+        svcId: svc.id, name: svc.name, price: svc.price, qty: next,
+        unit: svc.unit, subtotal: next * svc.price, maxKg: svc.maxKg ?? null,
+      }];
     });
+    setDraftQty(d => ({ ...d, [svc.id]: 1 }));
   };
 
   // These services are priced per load with a weight ceiling per load, so the
@@ -536,8 +559,10 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
   );
 
   const updateQty = (svcId: string, qty: number) => {
-    if (qty <= 0) setCart(p => p.filter(c => c.svcId !== svcId));
-    else setCart(p => p.map(c => c.svcId === svcId ? {...c, qty, subtotal: qty*c.price} : c));
+    if (qty <= 0) { setCart(p => p.filter(c => c.svcId !== svcId)); return; }
+    const svc = laundryServices.find(s => s.id === svcId);
+    const next = svc ? clampQuantity(qty, ruleFor(svc)) : qty;
+    setCart(p => p.map(c => c.svcId === svcId ? { ...c, qty: next, subtotal: next * c.price } : c));
   };
 
   const toggleAddon = (addon: any) => {
@@ -814,8 +839,8 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                 {laundryServices.map(svc => {
                   const inCart = cart.find(c => c.svcId === svc.id);
                   return (
-                    <div key={svc.id} onClick={() => addToCart(svc)}
-                      className={`relative p-4 rounded-2xl border cursor-pointer transition-all ${inCart ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-sm'}`}>
+                    <div key={svc.id} onClick={() => !inCart && addToCart(svc, draftFor(svc))}
+                      className={`relative p-4 rounded-2xl border transition-all ${inCart ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-sm cursor-pointer'}`}>
                       {inCart && (
                         <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">{inCart.qty}</div>
                       )}
@@ -829,13 +854,32 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                         ) : null}
                       </div>
                       
-                      {inCart && (
-                        <div className="mt-3 pt-3 border-t border-blue-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => updateQty(svc.id, inCart.qty - 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200 flex items-center justify-center"><MinusCircle className="w-5 h-5"/></button>
-                          <span className="font-mono font-bold text-sm text-blue-900">{inCart.qty}</span>
-                          <button onClick={() => updateQty(svc.id, inCart.qty + 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200 flex items-center justify-center"><PlusCircle className="w-5 h-5"/></button>
-                        </div>
-                      )}
+                      <div className="mt-3 pt-3 border-t border-slate-100" onClick={e => e.stopPropagation()}>
+                        {inCart ? (
+                          <QuantityInput
+                            size="sm"
+                            label={`Quantity of ${svc.name}`}
+                            value={inCart.qty}
+                            rule={ruleFor(svc)}
+                            unit={svc.type === 'per_kg' ? 'kg' : svc.unit}
+                            onChange={qty => updateQty(svc.id, qty)}
+                          />
+                        ) : (
+                          <div className="flex items-stretch gap-1.5">
+                            <QuantityInput
+                              size="sm"
+                              className="flex-1 min-w-0"
+                              label={`Quantity to add of ${svc.name}`}
+                              value={draftFor(svc)}
+                              rule={ruleFor(svc)}
+                              unit={svc.type === 'per_kg' ? 'kg' : svc.unit}
+                              onChange={qty => setDraftQty(d => ({ ...d, [svc.id]: qty }))}
+                            />
+                            <Button size="xs" variant="primary" className="shrink-0"
+                              onClick={() => addToCart(svc, draftFor(svc))}>Add</Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -901,12 +945,22 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                         <XCircle className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-slate-500">
-                        {c.qty} × {fmt.peso(c.price)}
-                        {c.maxKg ? <span className="text-slate-400"> · up to {c.maxKg * c.qty}kg</span> : null}
+                    <div className="flex items-center justify-between gap-3">
+                      <QuantityInput
+                        size="sm"
+                        className="w-32 shrink-0"
+                        label={`Quantity of ${c.name}`}
+                        value={c.qty}
+                        rule={ruleFor(laundryServices.find(s => s.id === c.svcId) ?? {})}
+                        onChange={qty => updateQty(c.svcId, qty)}
+                      />
+                      <div className="text-right">
+                        <div className="text-[11px] font-medium text-slate-400">
+                          × {fmt.peso(c.price)}
+                          {c.maxKg ? <span className="block">up to {formatQuantity(c.maxKg * c.qty)}kg</span> : null}
+                        </div>
+                        <span className="num font-bold text-slate-900">{fmt.peso(c.subtotal)}</span>
                       </div>
-                      <span className="font-mono font-bold text-slate-900">{fmt.peso(c.subtotal)}</span>
                     </div>
                   </div>
                 ))}

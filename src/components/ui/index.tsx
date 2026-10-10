@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { Loader2, Search, X, CheckCircle2, AlertCircle, Info, XCircle, FileText, Pencil, Trash2 } from 'lucide-react';
 import { REPORT_PERIOD_OPTIONS, type ReportPeriod } from '../../utils/reportPeriod';
+import {
+  clampQuantity, formatQuantity, parseQuantity, quantityStep, type QuantityRule,
+} from '../../utils/quantity';
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
 type BadgeVariant =
@@ -498,6 +501,97 @@ export function ToastContainer() {
           {t.message}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Quantity Input ───────────────────────────────────────────────────────────
+/**
+ * Stepper with a typable field, used by both tills.
+ *
+ * The cashier can hold the arrows for small corrections or type the figure
+ * straight in — "24" is faster than tapping + twenty-four times. While they are
+ * typing the field keeps its own draft, so a half-finished "1." never reaches
+ * the cart; the value is committed as soon as it parses, and a blur on
+ * something invalid snaps the field back to the last good quantity.
+ */
+export function QuantityInput({
+  value, onChange, rule, unit, label, size = 'md', className = '',
+}: {
+  value: number;
+  onChange: (qty: number) => void;
+  rule: QuantityRule;
+  unit?: string;
+  label: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(() => formatQuantity(value));
+  const [error, setError] = useState<string | null>(null);
+  const editing = useRef(false);
+  const step = quantityStep(rule);
+
+  // Follow the committed value unless the cashier is mid-edit in this field.
+  useEffect(() => {
+    if (!editing.current) setDraft(formatQuantity(value));
+  }, [value]);
+
+  const commit = (raw: string) => {
+    setDraft(raw);
+    const { value: parsed, error: message } = parseQuantity(raw, rule);
+    setError(message);
+    if (parsed !== null) onChange(parsed);
+  };
+
+  const nudge = (delta: number) => {
+    editing.current = false;
+    setError(null);
+    const next = clampQuantity(value + delta, rule);
+    setDraft(formatQuantity(next));
+    onChange(next);
+  };
+
+  const pad = size === 'sm' ? 'h-8' : 'h-10';
+  const btn = `${pad} aspect-square shrink-0 rounded-lg bg-slate-100 text-slate-700 font-bold text-lg leading-none
+               hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed
+               focus-visible:outline-2 focus-visible:outline-blue-500`;
+
+  return (
+    <div className={className}>
+      <div className="flex items-stretch gap-1.5">
+        <button type="button" className={btn} aria-label={`Decrease ${label}`}
+          disabled={value <= step} onClick={() => nudge(-step)}>−</button>
+
+        <div className="relative flex-1 min-w-0">
+          <input
+            type="text" inputMode={rule.allowDecimal ? 'decimal' : 'numeric'}
+            value={draft}
+            aria-label={label}
+            aria-invalid={error ? true : undefined}
+            onFocus={() => { editing.current = true; }}
+            onChange={e => commit(e.target.value)}
+            onBlur={() => {
+              editing.current = false;
+              setError(null);
+              setDraft(formatQuantity(value));
+            }}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            className={`num w-full ${pad} text-center rounded-lg border bg-white font-semibold text-slate-900
+                        outline-none transition-smooth focus:ring-2 focus:ring-blue-500/20
+                        ${error ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}
+                        ${unit ? 'pr-7' : ''}`}
+          />
+          {unit && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 pointer-events-none">
+              {unit}
+            </span>
+          )}
+        </div>
+
+        <button type="button" className={btn} aria-label={`Increase ${label}`}
+          disabled={value >= rule.max} onClick={() => nudge(step)}>+</button>
+      </div>
+      {error && <p className="mt-1 text-[11px] font-medium text-red-600">{error}</p>}
     </div>
   );
 }

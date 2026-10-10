@@ -24,11 +24,13 @@ import {
   useToast,
   KpiCard,
   Pagination,
-  PAGE_SIZE
+  PAGE_SIZE,
+  QuantityInput
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { printReceipt, exportReportPdf } from '../utils/pdf';
 import { resolveReportRange, withinReportRange, type ReportPeriod } from '../utils/reportPeriod';
+import { clampQuantity, MAX_LINE_QTY, type QuantityRule } from '../utils/quantity';
 import { useAsync } from '../hooks/useAsync';
 import { waterService } from '../services/waterService';
 import { pricingService, calcDeliveryFee, describeDeliveryFee } from '../services/pricingService';
@@ -387,17 +389,51 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
   const categories = ['All', ...Array.from(new Set(waterProducts.map(p => p.category)))];
   const displayed = activeCategory === 'All' ? waterProducts : waterProducts.filter(p => p.category === activeCategory);
 
-  const addToCart = (product: any) => {
+  /**
+   * Water is sold by the piece, so quantities are whole units. A product that
+   * tracks stock cannot be sold beyond what is on hand — the cap is enforced
+   * here rather than only at save time, so the cashier sees it while ringing up.
+   */
+  const ruleFor = (product: any): QuantityRule => ({
+    allowDecimal: false,
+    max: product.trackStock && product.stock != null
+      ? Math.max(0, Number(product.stock))
+      : MAX_LINE_QTY,
+    maxReason: product.trackStock ? 'stock' : undefined,
+  });
+
+  // Quantity typed on a tile before the line exists. Keyed by product.
+  const [draftQty, setDraftQty] = useState<Record<string, number>>({});
+  const draftFor = (id: string) => draftQty[id] ?? 1;
+
+  const addToCart = (product: any, qty = 1) => {
+    const rule = ruleFor(product);
+    if (rule.max <= 0) { toast.error(`${product.name} is out of stock.`); return; }
+
     setCart(prev => {
       const ex = prev.find(c => c.productId === product.id);
-      if (ex) return prev.map(c => c.productId === product.id ? {...c, qty: c.qty + 1, subtotal: (c.qty+1)*c.price} : c);
-      return [...prev, { productId: product.id, name: product.name, price: product.price, qty: 1, category: product.category, subtotal: product.price, countsForDelivery: Boolean(product.countsForDelivery) }];
+      // Adding an item already in the cart tops up that line instead of
+      // creating a second one, so a product can never appear twice.
+      if (ex) {
+        const next = clampQuantity(ex.qty + qty, rule);
+        if (next === ex.qty) toast.warning(`Only ${rule.max} ${product.name} in stock.`);
+        return prev.map(c => c.productId === product.id ? { ...c, qty: next, subtotal: next * c.price } : c);
+      }
+      const next = clampQuantity(qty, rule);
+      return [...prev, {
+        productId: product.id, name: product.name, price: product.price, qty: next,
+        category: product.category, subtotal: next * product.price,
+        countsForDelivery: Boolean(product.countsForDelivery),
+      }];
     });
+    setDraftQty(d => ({ ...d, [product.id]: 1 }));
   };
 
   const updateQty = (productId: string, qty: number) => {
-    if (qty <= 0) setCart(p => p.filter(c => c.productId !== productId));
-    else setCart(p => p.map(c => c.productId === productId ? {...c, qty, subtotal: qty*c.price} : c));
+    if (qty <= 0) { setCart(p => p.filter(c => c.productId !== productId)); return; }
+    const product = waterProducts.find(p => p.id === productId);
+    const next = product ? clampQuantity(qty, ruleFor(product)) : qty;
+    setCart(p => p.map(c => c.productId === productId ? { ...c, qty: next, subtotal: next * c.price } : c));
   };
 
   const cartSubtotal = cart.reduce((s, c) => s + c.subtotal, 0);
@@ -775,9 +811,11 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
                   </div>
                 ) : displayed.map(product => {
                   const inCart = cart.find(c => c.productId === product.id);
+                  const rule = ruleFor(product);
+                  const soldOut = rule.max <= 0;
                   return (
-                    <div key={product.id} onClick={() => addToCart(product)}
-                      className={`relative p-4 rounded-2xl border cursor-pointer transition-all ${inCart ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-sm'}`}>
+                    <div key={product.id} onClick={() => !soldOut && !inCart && addToCart(product, draftFor(product.id))}
+                      className={`relative p-4 rounded-2xl border transition-all ${soldOut ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed' : inCart ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-sm cursor-pointer'}`}>
                       {inCart && (
                         <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">{inCart.qty}</div>
                       )}
@@ -789,16 +827,40 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
                         )}
                       </div>
                       <p className="text-sm font-bold text-slate-800 leading-tight mb-1 pr-6">{product.name}</p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs font-bold text-slate-500">{fmt.peso(product.price)}</p>
                         <Badge variant="gray" className="text-[10px]">{product.category}</Badge>
+                        {product.trackStock && (
+                          <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 border ${soldOut ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                            {soldOut ? 'Out of stock' : `${rule.max} in stock`}
+                          </span>
+                        )}
                       </div>
 
-                      {inCart && (
-                        <div className="mt-3 pt-3 border-t border-blue-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => updateQty(product.id, inCart.qty - 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200">−</button>
-                          <span className="font-mono font-bold text-sm text-blue-900">{inCart.qty}</span>
-                          <button onClick={() => updateQty(product.id, inCart.qty + 1)} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200">+</button>
+                      {!soldOut && (
+                        <div className="mt-3 pt-3 border-t border-slate-100" onClick={e => e.stopPropagation()}>
+                          {inCart ? (
+                            <QuantityInput
+                              size="sm"
+                              label={`Quantity of ${product.name}`}
+                              value={inCart.qty}
+                              rule={rule}
+                              onChange={qty => updateQty(product.id, qty)}
+                            />
+                          ) : (
+                            <div className="flex items-stretch gap-1.5">
+                              <QuantityInput
+                                size="sm"
+                                className="flex-1 min-w-0"
+                                label={`Quantity to add of ${product.name}`}
+                                value={draftFor(product.id)}
+                                rule={rule}
+                                onChange={qty => setDraftQty(d => ({ ...d, [product.id]: qty }))}
+                              />
+                              <Button size="xs" variant="primary" className="shrink-0"
+                                onClick={() => addToCart(product, draftFor(product.id))}>Add</Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -840,9 +902,19 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
                         <XCircle className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-slate-500">{c.qty} × {fmt.peso(c.price)}</div>
-                      <span className="font-mono font-bold text-slate-900">{fmt.peso(c.subtotal)}</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <QuantityInput
+                        size="sm"
+                        className="w-32 shrink-0"
+                        label={`Quantity of ${c.name}`}
+                        value={c.qty}
+                        rule={ruleFor(waterProducts.find(p => p.id === c.productId) ?? { trackStock: false })}
+                        onChange={qty => updateQty(c.productId, qty)}
+                      />
+                      <div className="text-right">
+                        <div className="text-[11px] font-medium text-slate-400">× {fmt.peso(c.price)}</div>
+                        <span className="num font-bold text-slate-900">{fmt.peso(c.subtotal)}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
