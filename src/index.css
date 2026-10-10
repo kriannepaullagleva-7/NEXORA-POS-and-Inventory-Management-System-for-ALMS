@@ -139,7 +139,7 @@ body {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-  .hover\:-translate-y-0.5:hover,
+  .hover\:-translate-y-0\.5:hover,
   .active\:scale-95:active {
     transform: none !important;
   }
