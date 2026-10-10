@@ -471,7 +471,7 @@ function RecordPaymentPage({ onNavigate, userName }: { onNavigate: (p: PageId) =
             </div>
             <Textarea label="Description / Reason" placeholder="E.g., Unpaid balance for laundry..." value={debtDesc} onChange={e => setDebtDesc(e.target.value)} rows={3} />
             <div className="bg-red-50 p-4 rounded-xl border border-red-100 mt-4 flex gap-3 items-start">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-red-800">Debt Creation Notice</p>
                 <p className="text-xs text-red-600 mt-1">This will create a standalone debt record in the ledger. The customer will owe the specified amount until paid.</p>
@@ -574,7 +574,7 @@ function RecordPaymentPage({ onNavigate, userName }: { onNavigate: (p: PageId) =
 
                   {paymentMethod === 'unpaid' && (
                     <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-red-800 flex items-start gap-3 mt-4 animate-in fade-in slide-in-from-top-2">
-                      <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                      <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-semibold">Marking as unpaid debt</p>
                         <p className="text-sm mt-1">This order will be added to the debt ledger with an outstanding balance of <span className="font-mono font-bold">{fmt.peso(outstanding)}</span>.</p>

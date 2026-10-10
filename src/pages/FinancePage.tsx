@@ -156,7 +156,7 @@ function FinanceDashboard() {
                 <div key={e.name} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                    <span className="text-slate-600 font-medium truncate max-w-[120px]">{e.name}</span>
+                    <span className="text-slate-600 font-medium truncate max-w-30">{e.name}</span>
                   </div>
                   <span className="font-mono text-slate-900 font-bold">{fmt.peso(e.value)}</span>
                 </div>
@@ -422,7 +422,7 @@ function FinancialReportsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 flex flex-col">
           <CardHeader><h3 className="font-semibold text-slate-900 tracking-tight">Revenue vs Expenses — Monthly</h3></CardHeader>
-          <CardBody className="flex-1 pt-2 min-h-[320px]">
+          <CardBody className="flex-1 pt-2 min-h-80">
             <ResponsiveContainer width="100%" height="100%" minHeight={280}>
               <BarChart data={monthlyRevenue.map(m => ({ ...m, total: m.laundry + m.water, expense: m.expenses }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />

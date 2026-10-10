@@ -236,7 +236,7 @@ export default function ProductCatalog({ module }: Props) {
                   <Td className="num text-xs font-semibold text-blue-600">{p.id}</Td>
                   <Td>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
                         {p.image ? (
                           <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                         ) : p.icon ? (
@@ -287,7 +287,7 @@ export default function ProductCatalog({ module }: Props) {
       >
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
               {form.image ? (
                 <img src={form.image} alt="Preview" className="w-full h-full object-cover" />
               ) : form.icon ? (
@@ -353,7 +353,7 @@ export default function ProductCatalog({ module }: Props) {
         {viewProduct && (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+              <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
                 {viewProduct.image ? (
                   <img src={viewProduct.image} alt={viewProduct.name} className="w-full h-full object-cover" />
                 ) : viewProduct.icon ? (

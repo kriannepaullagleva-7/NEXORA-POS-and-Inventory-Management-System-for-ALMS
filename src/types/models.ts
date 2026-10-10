@@ -208,12 +208,3 @@ export interface LaundryAddon {
   price: number;
 }
 
-/** Aggregated numbers used by the dashboard, finance reports and analytics. */
-export interface RevenuePoint {
-  label: string;
-  laundry: number;
-  water: number;
-  cashSales: number;
-  gcashSales: number;
-  expenses: number;
-}

@@ -257,7 +257,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
       <div className="flex gap-2 overflow-x-auto pb-2">
         {Object.entries(counts).map(([k, v]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all flex items-center gap-2 ${tab===k ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
+            className={`shrink-0 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all flex items-center gap-2 ${tab===k ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
             {k === 'in_progress' ? 'In Progress' : k === 'all' ? 'All Orders' : STATUS_LABELS[k]}
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${tab===k ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{v}</span>
           </button>
@@ -741,8 +741,8 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
   }
 
   return (
-    <div className="flex flex-col space-y-4 h-[calc(100vh-110px)] max-h-[760px]">
-      <div className="flex items-center gap-4 flex-shrink-0">
+    <div className="flex flex-col space-y-4 h-[calc(100vh-110px)] max-h-190">
+      <div className="flex items-center gap-4 shrink-0">
         <Button variant="outline" size="sm" onClick={() => onNavigate('laundry')} icon={<ChevronLeft className="w-4 h-4" />}>Back</Button>
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">New Laundry Order</h1>
@@ -806,7 +806,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
 
           {/* Services Grid */}
           <Card className="flex-1 flex flex-col">
-            <CardHeader className="py-3 border-b border-slate-100 flex-shrink-0">
+            <CardHeader className="py-3 border-b border-slate-100 shrink-0">
               <h3 className="font-semibold text-slate-900 text-sm">Services</h3>
             </CardHeader>
             <CardBody className="py-4 flex-1 overflow-y-auto">
@@ -868,7 +868,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
         {/* RIGHT PANEL — Cart & Payment */}
         <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full">
           {/* Cart Header */}
-          <div className="bg-slate-900 px-6 py-4 text-white flex-shrink-0">
+          <div className="bg-slate-900 px-6 py-4 text-white shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <WashingMachine className="w-5 h-5 text-blue-400" />
@@ -929,7 +929,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
           </div>
 
           {/* Checkout Section */}
-          <div className="flex-shrink-0 border-t border-slate-200 bg-white">
+          <div className="shrink-0 border-t border-slate-200 bg-white">
             <div className="px-6 py-4">
               <div className="space-y-2 mb-4 text-sm">
                 <div className="flex justify-between text-slate-500">
@@ -1099,7 +1099,7 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
                 <Td className="font-mono text-xs font-semibold text-blue-600">{o.id}</Td>
                 <Td className="font-medium text-slate-800">{o.customerName}</Td>
                 <Td className="text-xs text-slate-500 font-medium">{fmt.shortDate(o.date)}</Td>
-                <Td className="text-xs text-slate-600 max-w-[150px] truncate">{o.services.map((s:any)=>s.name).join(', ')}</Td>
+                <Td className="text-xs text-slate-600 max-w-37.5 truncate">{o.services.map((s:any)=>s.name).join(', ')}</Td>
                 <Td align="right" className="font-mono font-bold">{fmt.peso(o.total)}</Td>
                 <Td><span className={`text-xs font-bold ${o.paymentMethod==='gcash'?'text-blue-600':'text-emerald-600'}`}>{o.paymentMethod ? o.paymentMethod.toUpperCase() : '—'}</span></Td>
    <Td><Badge variant={o.paymentStatus === 'paid' ? 'paid' : 'unpaid'}>{o.paymentStatus.toUpperCase()}</Badge></Td>

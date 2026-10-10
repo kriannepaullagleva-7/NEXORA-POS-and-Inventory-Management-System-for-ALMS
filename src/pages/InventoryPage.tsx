@@ -137,7 +137,7 @@ function ProductsPage() {
                   <Td className="font-semibold text-slate-900">{p.name}</Td>
                   <Td><Badge variant="gray">{p.category}</Badge></Td>
                   <Td align="right" className="font-mono font-medium">{fmt.peso(p.unitPrice)}</Td>
-                  <Td className="text-xs text-slate-500 truncate max-w-[200px]">{p.description}</Td>
+                  <Td className="text-xs text-slate-500 truncate max-w-50">{p.description}</Td>
                   <Td align="center">
                     <Button size="xs" variant="ghost" icon={<Edit className="w-4 h-4 text-slate-400"/>} />
                   </Td>
@@ -518,7 +518,7 @@ function StockMovementsPage() {
                 <Td className="num text-[10px] text-slate-400">{m.id}</Td>
                 <Td className="num text-xs text-slate-600">{fmt.datetime(m.date)}</Td>
                 <Td>
-                  <p className="font-medium text-slate-900 max-w-[200px] truncate">{m.item}</p>
+                  <p className="font-medium text-slate-900 max-w-50 truncate">{m.item}</p>
                 </Td>
                 <Td>
                   <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${m.type === 'stock_in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>

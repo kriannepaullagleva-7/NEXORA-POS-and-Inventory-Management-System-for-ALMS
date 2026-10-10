@@ -133,11 +133,11 @@ export function KpiCard({ title, value, subtext, icon, trend, onClick }: KpiCard
   return (
     <div
       onClick={onClick}
-      className={`p-3 sm:p-4 md:p-5 flex flex-col justify-between h-full min-h-[100px] sm:min-h-[110px] md:min-h-[120px] bg-white rounded-lg sm:rounded-xl border border-slate-200 shadow-sm transition-smooth ${onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-lg hover:-translate-y-1 hover:bg-gradient-to-br hover:from-blue-50/50 hover:to-blue-50/30' : 'hover:border-slate-300 hover:shadow'}`}
+      className={`p-3 sm:p-4 md:p-5 flex flex-col justify-between h-full min-h-25 sm:min-h-27.5 md:min-h-30 bg-white rounded-lg sm:rounded-xl border border-slate-200 shadow-sm transition-smooth ${onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-lg hover:-translate-y-1 hover:bg-linear-to-br hover:from-blue-50/50 hover:to-blue-50/30' : 'hover:border-slate-300 hover:shadow'}`}
     >
       {/* Upper-left: icon + title */}
       <div className="flex items-center gap-2 mb-2 sm:mb-3">
-        {icon && <div className="text-slate-400 flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5">{icon}</div>}
+        {icon && <div className="text-slate-400 shrink-0 w-4 h-4 sm:w-5 sm:h-5">{icon}</div>}
         <div className="text-[10px] sm:text-xs md:text-sm font-bold text-slate-500 tracking-tight leading-tight line-clamp-2">{title}</div>
       </div>
       {/* Lower-right: value + subtext/trend */}
@@ -491,7 +491,7 @@ export function ToastContainer() {
   };
 
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none" role="status" aria-live="polite" aria-atomic="false">
+    <div className="fixed top-4 right-4 z-100 flex flex-col gap-3 pointer-events-none" role="status" aria-live="polite" aria-atomic="false">
       {toasts.map(t => (
         <div key={t.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium animate-slideInRight pointer-events-auto ${styles[t.type]}`}>
           {iconMap[t.type]}
@@ -618,7 +618,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
         <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-900 tracking-tight">{title}</h1>
         {subtitle && <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 shrink-0 flex-wrap">{actions}</div>}
     </div>
   );
 }

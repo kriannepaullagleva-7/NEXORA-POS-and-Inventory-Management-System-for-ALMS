@@ -203,7 +203,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
                   {sale.phone && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{sale.phone}</p>}
                 </Td>
                 <Td className="text-xs text-slate-500 font-medium">{fmt.shortDate(sale.date)}</Td>
-                <Td className="text-xs text-slate-600 max-w-[200px] truncate" title={sale.items.map((i:any) => `${i.qty}× ${i.name}`).join(', ')}>
+                <Td className="text-xs text-slate-600 max-w-50 truncate" title={sale.items.map((i:any) => `${i.qty}× ${i.name}`).join(', ')}>
                   {sale.items.map((i:any) => `${i.qty}× ${i.name}`).join(', ')}
                 </Td>
                 <Td align="right" className="font-mono font-bold text-slate-900">{fmt.peso(sale.total)}</Td>
@@ -609,8 +609,8 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
   }
 
   return (
-    <div className="flex flex-col space-y-4 h-[calc(100vh-110px)] max-h-[760px]">
-      <div className="flex items-center gap-4 flex-shrink-0">
+    <div className="flex flex-col space-y-4 h-[calc(100vh-110px)] max-h-190">
+      <div className="flex items-center gap-4 shrink-0">
         <Button variant="outline" size="sm" onClick={() => onNavigate('water')} icon={<ChevronLeft className="w-4 h-4" />}>Back</Button>
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Point of Sale</h1>
@@ -754,7 +754,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
 
           {/* Products Grid */}
           <Card className="flex-1 flex flex-col">
-            <CardHeader className="py-3 border-b border-slate-100 flex-shrink-0">
+            <CardHeader className="py-3 border-b border-slate-100 shrink-0">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-slate-900 text-sm">Products</h3>
                 <div className="flex gap-2">
@@ -812,7 +812,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
         {/* RIGHT PANEL — Cart & Payment */}
         <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full">
           {/* Cart Header */}
-          <div className="bg-slate-900 px-6 py-4 text-white flex-shrink-0">
+          <div className="bg-slate-900 px-6 py-4 text-white shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5 text-blue-400" />
@@ -851,7 +851,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
           </div>
 
           {/* Checkout Section */}
-          <div className="flex-shrink-0 border-t border-slate-200 bg-white">
+          <div className="shrink-0 border-t border-slate-200 bg-white">
             <div className="px-6 py-4">
               <div className="space-y-2 mb-4 text-sm">
                 <div className="flex justify-between text-slate-500">

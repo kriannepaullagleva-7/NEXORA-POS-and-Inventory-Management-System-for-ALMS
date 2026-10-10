@@ -148,7 +148,7 @@ export default function AnalyticsPage() {
       <div className="flex gap-2 overflow-x-auto pb-2">
         {reports.map(r => (
           <button key={r.id} onClick={() => setReportType(r.id)}
-            className={`px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-smooth border ${reportType === r.id ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white border-blue-700 shadow-lg hover:shadow-lg -translate-y-0.5' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm'}`}>
+            className={`px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-smooth border ${reportType === r.id ? 'bg-linear-to-r from-blue-600 to-blue-700 text-white border-blue-700 shadow-lg hover:shadow-lg -translate-y-0.5' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm'}`}>
             {r.label}
           </button>
         ))}
@@ -209,7 +209,7 @@ export default function AnalyticsPage() {
           <CardHeader><h3 className="font-semibold text-slate-900 tracking-tight">Revenue by Service</h3></CardHeader>
           <CardBody className="flex-1 flex items-center justify-center">
             <div className="flex items-center gap-8 w-full">
-              <div className="h-48 w-48 flex-shrink-0">
+              <div className="h-48 w-48 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={revenueByService} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value" stroke="none">

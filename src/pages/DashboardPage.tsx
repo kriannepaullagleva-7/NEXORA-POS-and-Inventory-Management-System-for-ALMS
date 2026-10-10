@@ -141,14 +141,14 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
 
       {/* Quick Actions */}
       <div className="flex items-center gap-2 py-1 overflow-x-auto flex-nowrap pb-2 -mx-6 px-6 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">
-        <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap flex-shrink-0 mr-1">Quick Actions</span>
+        <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap shrink-0 mr-1">Quick Actions</span>
         {quickActions.map(a => (
           <Button
             key={a.label}
             variant="outline"
             size="sm"
             onClick={() => onNavigate(a.page)}
-            className="font-semibold whitespace-nowrap flex-shrink-0 text-center justify-center text-xs sm:text-sm"
+            className="font-semibold whitespace-nowrap shrink-0 text-center justify-center text-xs sm:text-sm"
           >
             <span className="text-blue-500">{a.icon}</span>
             <span className="hidden sm:inline">{a.label}</span>
@@ -175,7 +175,7 @@ export default function DashboardPage({ onNavigate, userRole }: Props) {
               <CardBody className="flex-1 pt-2">
                 {/* Height comes from CSS so the chart follows a window resize;
                     a one-off window.innerWidth read never updates. */}
-                <div className="h-[250px] sm:h-[300px] lg:h-[380px]">
+                <div className="h-62.5 sm:h-75 lg:h-95">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dailyRevenue} barSize={24} barGap={4}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />

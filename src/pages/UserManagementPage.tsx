@@ -47,13 +47,13 @@ import type { PageId } from '../components/Layout';
 
 interface Props { subPage: PageId; onNavigate: (p: PageId) => void; }
 
-export default function UserManagementPage({ subPage, onNavigate }: Props) {
+export default function UserManagementPage({ subPage }: Props) {
   if (subPage === 'roles') return <RolesPage />;
   if (subPage === 'activity-logs') return <ActivityLogsPage />;
-  return <EmployeesPage onNavigate={onNavigate} />;
+  return <EmployeesPage />;
 }
 
-function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
+function EmployeesPage() {
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showView, setShowView] = useState<Employee | null>(null);
@@ -215,7 +215,7 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
           <Input label="Phone Number" placeholder="09XXXXXXXXX" value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} />
           
           <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-800 flex gap-3 items-start mt-2">
-            <ShieldAlert className="w-4 h-4 flex-shrink-0 text-blue-600 mt-0.5" />
+            <ShieldAlert className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
             <p>This creates the employee record only. To give them a login, add a user with the same email in Supabase → Authentication → Users; the account links automatically.</p>
           </div>
         </div>
@@ -367,7 +367,7 @@ function RolesPage() {
       
       <Card className="p-5 bg-amber-50 border border-amber-200 shadow-sm">
         <div className="flex gap-4">
-          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
             <ShieldAlert className="w-5 h-5 text-amber-600" />
           </div>
           <div>
