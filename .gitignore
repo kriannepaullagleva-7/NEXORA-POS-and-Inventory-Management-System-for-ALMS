@@ -18,3 +18,11 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+
+# Agent instruction files — local tooling, not application source.
+AGENTS.md
+CLAUDE.md
+
+# draw.io diagrams are kept locally rather than versioned here.
+*.drawio
+*.drawio.bkp
