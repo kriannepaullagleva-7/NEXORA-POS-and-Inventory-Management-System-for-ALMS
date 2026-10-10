@@ -1,0 +1,500 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>ALMS ERD</title>
+<style>
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#fff;font-family:'Segoe UI',system-ui,sans-serif;width:2520px;height:1480px;position:relative}
+  .canvas{position:relative;width:2520px;height:1480px}
+  svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .rel{fill:none;stroke:#94a3b8;stroke-width:1.6}
+  .tbl{position:absolute;border:1.5px solid #0f172a;background:#fff;z-index:2}
+  .th{background:#0f172a;color:#fff;font-weight:700;font-size:15px;padding:8px 10px;text-align:center;letter-spacing:.2px}
+  .tr{display:flex;align-items:center;height:25px;border-top:1px solid #e2e8f0;font-size:12.5px;color:#1e293b}
+  .tr.pk{background:#f8fafc}
+  .k{width:54px;flex:none;text-align:center;font-weight:700;font-size:10.5px;color:#b45309;border-right:1px solid #e2e8f0;height:100%;display:flex;align-items:center;justify-content:center}
+  .n{flex:1;padding:0 9px;font-weight:500}
+  .tr.pk .n{font-weight:700;text-decoration:underline}
+  .t{padding:0 9px;color:#94a3b8;font-size:11px;font-family:ui-monospace,monospace}
+  h1{position:absolute;left:40px;top:1390px;font-size:26px;font-weight:700;color:#0f172a}
+  .sub{position:absolute;left:40px;top:1424px;font-size:14px;color:#64748b}
+  .legend{position:absolute;right:40px;top:1388px;font-size:12.5px;color:#475569;text-align:right;line-height:1.7}
+  .legend b{color:#b45309}
+</style></head>
+<body><div class="canvas">
+<svg><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+  </marker>
+</defs><path d="M 430 111.5 H 400 V 57 H 370" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="370" cy="57" r="0"/><path d="M 430 711.5 H 400 V 57 H 370" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="370" cy="57" r="0"/><path d="M 830 851.5 H 600 V 57 H 370" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="370" cy="57" r="0"/><path d="M 830 111.5 H 795 V 57 H 760" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="760" cy="57" r="0"/><path d="M 830 136.5 H 600 V 307 H 370" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="370" cy="307" r="0"/><path d="M 830 341.5 H 795 V 57 H 760" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="760" cy="57" r="0"/><path d="M 830 366.5 H 600 V 647 H 370" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="370" cy="647" r="0"/><path d="M 830 571.5 H 795 V 657 H 760" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="760" cy="657" r="0"/><path d="M 830 596.5 H 600 V 817 H 370" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="370" cy="817" r="0"/><path d="M 830 801.5 H 795 V 57 H 760" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="760" cy="57" r="0"/><path d="M 830 826.5 H 795 V 657 H 760" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="760" cy="657" r="0"/><path d="M 1260 596.5 H 1230 V 57 H 1260" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1260" cy="57" r="0"/><path d="M 1260 916.5 H 1230 V 57 H 1260" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1260" cy="57" r="0"/><path d="M 1260 1131.5 H 1230 V 57 H 1260" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1260" cy="57" r="0"/><path d="M 1700 1131.5 H 1645 V 1077 H 1590" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1590" cy="1077" r="0"/><path d="M 1700 1156.5 H 1645 V 367 H 1590" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1590" cy="367" r="0"/><path d="M 1700 421.5 H 1645 V 367 H 1590" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1590" cy="367" r="0"/><path d="M 1700 596.5 H 1645 V 57 H 1590" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="1590" cy="57" r="0"/><path d="M 2140 481.5 H 2110 V 57 H 2140" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="2140" cy="57" r="0"/><path d="M 2140 666.5 H 2110 V 57 H 2140" class="rel" marker-end="url(#arrow)"/>
+          <circle cx="2140" cy="57" r="0"/></svg>
+
+<div class="tbl" style="left:40px;top:40px;width:330px">
+  <div class="th">customers</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">first_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">last_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">email</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">phone</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">address</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:40px;top:290px;width:330px">
+  <div class="th">laundry_services</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">category</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">type</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">max_kg</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">description</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">is_active</span><span class="t">bool</span>
+  </div>
+</div>
+<div class="tbl" style="left:40px;top:630px;width:330px">
+  <div class="th">laundry_addons</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">price</span><span class="t">numeric</span>
+  </div>
+</div>
+<div class="tbl" style="left:40px;top:800px;width:330px">
+  <div class="th">water_products</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">category</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">icon</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">image_url</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">description</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">stock</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">is_active</span><span class="t">bool</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">track_stock</span><span class="t">bool</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">counts_for_delivery</span><span class="t">bool</span>
+  </div>
+</div>
+<div class="tbl" style="left:40px;top:1230px;width:330px">
+  <div class="th">delivery_pricing</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">quantity</span><span class="t">int UQ</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">is_active</span><span class="t">bool</span>
+  </div>
+</div>
+<div class="tbl" style="left:430px;top:40px;width:330px">
+  <div class="th">laundry_orders</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">customer_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">customer_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">phone</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">address</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">date</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">subtotal</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">discount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">total</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">amount_paid</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">change_amount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">payment_status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">payment_method</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">gcash_reference</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">processed_by</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">notes</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:430px;top:640px;width:330px">
+  <div class="th">water_transactions</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">customer_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">customer_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">phone</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">address</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">date</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">subtotal</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">delivery_fee</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">discount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">total</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">amount_paid</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">change_amount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">payment_method</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">payment_status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">gcash_reference</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">delivery</span><span class="t">bool</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">delivery_address</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">processed_by</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">notes</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:830px;top:40px;width:330px">
+  <div class="th">laundry_order_services</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">laundry_order_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">laundry_service_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">quantity</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit_price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">subtotal</span><span class="t">numeric</span>
+  </div>
+</div>
+<div class="tbl" style="left:830px;top:270px;width:330px">
+  <div class="th">laundry_order_addons</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">laundry_order_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">laundry_addon_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">quantity</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit_price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">subtotal</span><span class="t">numeric</span>
+  </div>
+</div>
+<div class="tbl" style="left:830px;top:500px;width:330px">
+  <div class="th">water_transaction_items</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">transaction_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">water_product_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">quantity</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit_price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">subtotal</span><span class="t">numeric</span>
+  </div>
+</div>
+<div class="tbl" style="left:830px;top:730px;width:330px">
+  <div class="th">payments</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">laundry_order_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">water_transaction_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">customer_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">customer_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">type</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">description</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">amount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">amount_received</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">change_amount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">balance</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">method</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">payment_date</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">gcash_reference</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">processed_by</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:1260px;top:40px;width:330px">
+  <div class="th">suppliers</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">contact_person</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">phone</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">email</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">address</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">category</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">status</span><span class="t">enum</span>
+  </div>
+</div>
+<div class="tbl" style="left:1260px;top:350px;width:330px">
+  <div class="th">inventory_items</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">category</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit_price</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">cost_per_unit</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">current_qty</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">reorder_level</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">supplier_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">description</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:1260px;top:720px;width:330px">
+  <div class="th">expenses</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">date</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">category</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">description</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">amount</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">method</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">supplier_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">recorded_by</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">notes</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:1260px;top:1060px;width:330px">
+  <div class="th">purchase_orders</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">supplier_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">supplier_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">date</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">expected_delivery</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">received_date</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">payment_status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">total</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">requested_by</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">notes</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:1700px;top:350px;width:330px">
+  <div class="th">stock_movements</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">inventory_item_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">item_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">type</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">quantity</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">prev_stock</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">new_stock</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">supplier_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">supplier_name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">po_ref</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">reference</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">reason</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">processed_by</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">datetime</span><span class="t">timestamptz</span>
+  </div>
+</div>
+<div class="tbl" style="left:1700px;top:1060px;width:330px">
+  <div class="th">purchase_order_items</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">purchase_order_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">inventory_item_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">quantity</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">unit_cost</span><span class="t">numeric</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">subtotal</span><span class="t">numeric</span>
+  </div>
+</div>
+<div class="tbl" style="left:2140px;top:40px;width:330px">
+  <div class="th">employees</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">auth_user_id</span><span class="t">uuid UQ</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">name</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">role</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">email</span><span class="t">text UQ</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">phone</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">status</span><span class="t">enum</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">joined</span><span class="t">date</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">last_login</span><span class="t">timestamptz</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">avatar_url</span><span class="t">text</span>
+  </div>
+</div>
+<div class="tbl" style="left:2140px;top:410px;width:330px">
+  <div class="th">activity_logs</div>
+  <div class="tr pk">
+    <span class="k">PK</span><span class="n">id</span><span class="t">bigint</span>
+  </div><div class="tr">
+    <span class="k">FK</span><span class="n">employee_id</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">action</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">module</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">datetime</span><span class="t">timestamptz</span>
+  </div>
+</div>
+<div class="tbl" style="left:2140px;top:620px;width:330px">
+  <div class="th">notification_reads</div>
+  <div class="tr pk">
+    <span class="k">PK,FK</span><span class="n">employee_id</span><span class="t">text</span>
+  </div><div class="tr pk">
+    <span class="k">PK</span><span class="n">notif_key</span><span class="t">text</span>
+  </div><div class="tr">
+    <span class="k"></span><span class="n">read_at</span><span class="t">timestamptz</span>
+  </div>
+</div>
+<h1>NEXORA — ALMS Entity Relationship Diagram</h1>
+<div class="sub">Point of Sale and Inventory Management System · Water Refilling &amp; Laundry · 20 entities</div>
+<div class="legend"><b>PK</b> primary key &nbsp;·&nbsp; <b>FK</b> foreign key &nbsp;·&nbsp; UQ unique<br>
+Arrows point from the foreign key to the referenced entity (many → one)</div>
+</div></body></html>
