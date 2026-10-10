@@ -32,7 +32,8 @@ import {
   CheckCircle2,
   Banknote,
   Smartphone,
-  MapPin
+  MapPin,
+  PackageCheck
 } from 'lucide-react';
 
 import type { PageId } from '../components/Layout';
@@ -150,7 +151,7 @@ function ProductsPage() {
         footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" loading={saving} onClick={handleAdd}>Save Product</Button></>}>
         <div className="space-y-4">
           <Input label="Product Name *" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Ariel Detergent" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Category *" value={form.category} onChange={e => setForm(p=>({...p,category:e.target.value}))}
               options={[{value:'',label:'Select...'},{value:'Laundry',label:'Laundry'},{value:'Water',label:'Water'},{value:'Accessories',label:'Accessories'},{value:'Office',label:'Office'},{value:'Packaging',label:'Packaging'}]} />
             <Input label="Unit Price (₱) *" type="number" value={form.unitPrice} onChange={e => setForm(p=>({...p,unitPrice:e.target.value}))} placeholder="0.00" />
@@ -330,16 +331,16 @@ function InventoryItemsPage({ userName }: { userName: string }) {
         footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast.success('Item added successfully.'); setShowAdd(false); }}>Save Item</Button></>}>
         <div className="space-y-4">
           <Input label="Item Name" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Ariel Detergent Powder" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Category" value={form.category} onChange={e => setForm(p=>({...p,category:e.target.value}))}
               options={[{value:'',label:'Select...'},{value:'Laundry Supplies',label:'Laundry Supplies'},{value:'Water Supplies',label:'Water Supplies'},{value:'Accessories',label:'Accessories'},{value:'Office Supplies',label:'Office Supplies'},{value:'Packaging',label:'Packaging'}]} />
             <Input label="Unit of Measurement" value={form.unit} onChange={e => setForm(p=>({...p,unit:e.target.value}))} placeholder="e.g. kg, bottle, pcs" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Initial Quantity" type="number" value={form.currentQty} onChange={e => setForm(p=>({...p,currentQty:e.target.value}))} placeholder="0" />
             <Input label="Reorder Level" type="number" value={form.reorderLevel} onChange={e => setForm(p=>({...p,reorderLevel:e.target.value}))} placeholder="0" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Cost per Unit (₱)" type="number" value={form.costPerUnit} onChange={e => setForm(p=>({...p,costPerUnit:e.target.value}))} placeholder="0.00" />
             <Select label="Preferred Supplier" value={form.supplier} onChange={e => setForm(p=>({...p,supplier:e.target.value}))}
               options={[{value:'',label:'Select supplier...'}, ...suppliers.map(s=>({value:s.name,label:s.name}))]} />
@@ -362,11 +363,11 @@ function InventoryItemsPage({ userName }: { userName: string }) {
             
             <Select label="Supplier *" value={siSupplier} onChange={e => setSiSupplier(e.target.value)}
               options={[{value:'',label:'Select supplier...'}, ...suppliers.map(s=>({value:s.id,label:s.name}))]} />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label="PO Reference (Optional)" placeholder="e.g. PO-0021" value={siPORef} onChange={e => setSiPORef(e.target.value)} />
               <Input label="Delivery Ref / DR #" placeholder="e.g. DR-1234" value={siRef} onChange={e => setSiRef(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label={`Quantity Added (${showStockIn.unit}) *`} type="number" value={siQty} onChange={e => setSiQty(e.target.value)} placeholder="0" />
               <Input label="Unit Cost (₱) *" type="number" value={siUnitCost} onChange={e => setSiUnitCost(e.target.value)} placeholder={showStockIn.costPerUnit.toString()} />
             </div>
@@ -376,7 +377,7 @@ function InventoryItemsPage({ userName }: { userName: string }) {
                 <span className="font-mono font-bold text-slate-900 text-lg">{fmt.peso((parseFloat(siQty)||0) * (parseFloat(siUnitCost)||0))}</span>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label="Date Received" type="date" value={siDate} onChange={e => setSiDate(e.target.value)} className="col-span-2" />
             </div>
             <Textarea label="Notes (Optional)" value={siNotes} onChange={e => setSiNotes(e.target.value)} placeholder="Condition, discrepancies, etc." rows={2} />
@@ -399,7 +400,7 @@ function InventoryItemsPage({ userName }: { userName: string }) {
 
             <Select label="Reason for Stock Out *" value={soReason} onChange={e => setSoReason(e.target.value)}
               options={[{value:'',label:'Select reason...'}, ...STOCK_OUT_REASONS.map(r=>({value:r,label:r}))]} />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label={`Quantity Removed (${showStockOut.unit}) *`} type="number" value={soQty} onChange={e => setSoQty(e.target.value)} placeholder="0" max={showStockOut.currentQty} />
               <Input label="Reference (Order # etc.)" placeholder="e.g. LAU-0049" value={soRef} onChange={e => setSoRef(e.target.value)} />
             </div>
@@ -751,7 +752,7 @@ function SuppliersPage() {
         <div className="space-y-4">
           <Input label="Company Name *" placeholder="e.g. ABC Supplies" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           <Input label="Contact Person" placeholder="e.g. Juan dela Cruz" value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Email Address" type="email" placeholder="contact@supplier.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
             <Input label="Phone Number" placeholder="02XXXXXXXX" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
           </div>
@@ -766,7 +767,7 @@ function SuppliersPage() {
         <div className="space-y-4">
           <Input label="Company Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           <Input label="Contact Person" value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Email Address" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
             <Input label="Phone Number" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
           </div>
@@ -815,6 +816,8 @@ function PurchaseOrdersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [viewPO, setViewPO] = useState<any>(null);
   const [confirmPrintPO, setConfirmPrintPO] = useState(false);
+  const [confirmReceivePO, setConfirmReceivePO] = useState(false);
+  const [receiving, setReceiving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [poForm, setPoForm] = useState({ supplierId: '', expectedDelivery: '', notes: '' });
   const [poLines, setPoLines] = useState<PoLine[]>([]);
@@ -889,6 +892,22 @@ function PurchaseOrdersPage() {
       toast.error(err instanceof Error ? err.message : 'Could not create the purchase order.');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleReceivePO = async () => {
+    if (!viewPO) return;
+    setReceiving(true);
+    try {
+      await inventoryService.receivePurchaseOrder(viewPO.id, employee?.name ?? 'Staff');
+      toast.success(`${viewPO.id} received — stock updated.`);
+      setViewPO(null);
+      await reload();
+      await refreshInventory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not receive the purchase order.');
+    } finally {
+      setReceiving(false);
     }
   };
 
@@ -968,6 +987,9 @@ function PurchaseOrdersPage() {
             <>
               <Button variant="ghost" onClick={() => setViewPO(null)}>Close</Button>
               <Button variant="outline" onClick={() => setConfirmPrintPO(true)} icon={<FileText className="w-4 h-4" />}>Export PDF</Button>
+              {viewPO.status !== 'received' && (
+                <Button variant="primary" loading={receiving} onClick={() => setConfirmReceivePO(true)} icon={<PackageCheck className="w-4 h-4" />}>Receive Stock</Button>
+              )}
             </>
           }>
           <div className="space-y-4">
@@ -1004,6 +1026,15 @@ function PurchaseOrdersPage() {
         title="Export Purchase Order?"
         message={`Generate a PDF for purchase order ${viewPO?.id ?? ''}.`}
         confirmLabel="Export PDF"
+      />
+
+      <Confirm
+        open={confirmReceivePO}
+        onClose={() => setConfirmReceivePO(false)}
+        onConfirm={handleReceivePO}
+        title="Receive this delivery?"
+        message={`Add every line item on ${viewPO?.id ?? ''} to inventory stock and mark the order received. This can only be done once.`}
+        confirmLabel="Receive Stock"
       />
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Purchase Order" size="lg"

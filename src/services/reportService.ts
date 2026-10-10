@@ -77,7 +77,7 @@ export function periodRange(period: Period): { from: string; to: string; label: 
   }
 }
 
-const emptySummary = (label = '', from = '', to = ''): PeriodSummary => ({
+export const emptySummary = (label = '', from = '', to = ''): PeriodSummary => ({
   label, from, to,
   laundryRevenue: 0, waterRevenue: 0, totalRevenue: 0,
   laundryCount: 0, waterCount: 0, totalTransactions: 0,
@@ -118,7 +118,11 @@ export const reportService = {
   /** Every Business Intelligence figure for one filter window. */
   async summary(period: Period): Promise<PeriodSummary> {
     const { from, to, label } = periodRange(period);
+    return this.summaryForRange(from, to, label);
+  },
 
+  /** Same figures as summary(), for an explicit inclusive date range. */
+  async summaryForRange(from: string, to: string, label = ''): Promise<PeriodSummary> {
     const { data, error } = await supabase.rpc('bi_summary', { p_from: from, p_to: to });
     if (error) throw new Error(error.message);
 

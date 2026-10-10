@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
+  Pagination,
+  PAGE_SIZE,
   PageHeader,
   Card,
   CardHeader,
@@ -94,6 +96,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [editOrder, setEditOrder] = useState<LaundryOrder | null>(null);
   const [editForm, setEditForm] = useState({ customerName: '', phone: '', notes: '', discount: '' });
   const [deleteTarget, setDeleteTarget] = useState<LaundryOrder | null>(null);
+  const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [confirmPrint, setConfirmPrint] = useState(false);
   const toast = useToast();
@@ -140,6 +143,10 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
       o.services.map(sv => sv.name), o.addons.map(a => a.name)
     )
   );
+
+  // Paint one page at a time so a long order list never locks up the tablet.
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, tab]);
 
   const applyStatus = async (order: LaundryOrder, newStatus: LaundryStatus, message: string) => {
     try {
@@ -282,7 +289,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               <Tr><Td colSpan={9} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
             ) : filtered.length === 0 ? (
               <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No orders found</span></Td></Tr>
-            ) : filtered.map(order => (
+            ) : visible.map(order => (
               <Tr key={order.id} onClick={() => setViewOrder(order)}>
                 <Td className="num text-xs font-semibold text-blue-600">{order.id}</Td>
                 <Td className="font-medium text-slate-800">{order.customerName}</Td>
@@ -319,6 +326,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             ))}
           </Tbody>
         </Table>
+        <Pagination page={page} total={filtered.length} onPage={setPage} />
       </Card>
 
       {/* Order Detail Modal */}
@@ -466,7 +474,7 @@ function OrderTrackerPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
         onClose={() => setConfirmPrint(false)}
         onConfirm={() => viewOrder && printOrderReceipt(viewOrder)}
         title="Print Receipt?"
-        message={`Generate an 80mm receipt PDF for order ${viewOrder?.id ?? ''}.`}
+        message={`Generate a 58mm receipt PDF for order ${viewOrder?.id ?? ''}.`}
         confirmLabel="Print Receipt"
       />
     </div>
@@ -501,7 +509,11 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
 
   const [showReceipt, setShowReceipt] = useState(false);
   const [confirmPrint, setConfirmPrint] = useState(false);
-  const [orderId] = useState(`LAU-${String(Math.floor(Math.random()*9000)+1000)}`);
+  // The database assigns the order id on save; there is none to show before
+  // then. Printing a receipt with a made-up id would put a number on paper that
+  // no order matches (and that may collide with a real order), so both the
+  // receipt id and the print action wait for a successful save to set this.
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   const filteredCusts = customers.filter(c =>
     `${c.firstName} ${c.lastName}`.toLowerCase().includes(custSearch.toLowerCase()) ||
@@ -603,9 +615,9 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
 
       await activityService.log(employee?.id ?? null, 'Laundry', `Created laundry order ${order.id} for ${order.customerName}`);
 
+      setSavedId(order.id);
       toast.success(`Order ${order.id} created!`);
       if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
-      onNavigate('laundry');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save the order.');
     } finally {
@@ -618,9 +630,9 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
     return (
       <div className="max-w-md mx-auto py-8">
         <div className="flex items-center gap-3 mb-6">
-          <Button variant="outline" size="sm" onClick={() => setShowReceipt(false)} icon={<ChevronLeft className="w-4 h-4" />}>Back to Edit</Button>
+          {!savedId && <Button variant="outline" size="sm" onClick={() => setShowReceipt(false)} icon={<ChevronLeft className="w-4 h-4" />}>Back to Edit</Button>}
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Review Receipt</h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{savedId ? 'Receipt' : 'Review Receipt'}</h1>
           </div>
         </div>
         
@@ -631,7 +643,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
             </div>
             <div className="text-xl font-bold tracking-tight">ALMS Laundry Shop</div>
             <div className="text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">Professional Care</div>
-            <div className="mt-4 font-mono text-sm bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 inline-block shadow-inner">{orderId}</div>
+            <div className="mt-4 font-mono text-sm bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 inline-block shadow-inner">{savedId ?? 'Not yet saved'}</div>
           </div>
           
           <div className="px-6 py-5 grid grid-cols-2 gap-4 text-sm border-b border-dashed border-slate-200">
@@ -689,8 +701,10 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
         </div>
         
         <div className="flex gap-3 mt-6">
-          <Button variant="outline" className="flex-1 justify-center" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
-          <Button variant="primary" className="flex-1 justify-center" loading={saving} onClick={persistOrder}>Confirm & Finish</Button>
+          <Button variant="outline" className="flex-1 justify-center" disabled={!savedId} onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+          {savedId
+            ? <Button variant="primary" className="flex-1 justify-center" onClick={() => onNavigate('laundry')}>Done</Button>
+            : <Button variant="primary" className="flex-1 justify-center" loading={saving} onClick={persistOrder}>Confirm &amp; Finish</Button>}
         </div>
 
         <Confirm
@@ -700,7 +714,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
             printReceipt({
               businessName: 'ALMS Laundry Shop',
               tagline: 'Professional Care',
-              txnId: orderId,
+              txnId: savedId ?? '',
               dateTime: new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
               cashier: userName,
               customer: custName || 'Walk-in',
@@ -719,7 +733,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
             toast.success('Receipt downloaded.');
           }}
           title="Print Receipt?"
-          message={`Generate an 80mm receipt PDF for order ${orderId}.`}
+          message={`Generate a 58mm receipt PDF for order ${savedId ?? ''}.`}
           confirmLabel="Print Receipt"
         />
       </div>
@@ -732,7 +746,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
         <Button variant="outline" size="sm" onClick={() => onNavigate('laundry')} icon={<ChevronLeft className="w-4 h-4" />}>Back</Button>
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">New Laundry Order</h1>
-          <p className="text-xs text-slate-500 font-mono mt-0.5">{orderId} · {new Date().toLocaleDateString('en-PH')}</p>
+          <p className="text-xs text-slate-500 font-mono mt-0.5">New Order · {new Date().toLocaleDateString('en-PH')}</p>
         </div>
       </div>
 
@@ -780,7 +794,7 @@ function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void;
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input placeholder="First Name *" value={newCust.firstName} onChange={e => setNewCust(p=>({...p,firstName:e.target.value}))} />
                   <Input placeholder="Last Name *" value={newCust.lastName} onChange={e => setNewCust(p=>({...p,lastName:e.target.value}))} />
                   <Input placeholder="Phone Number *" value={newCust.phone} onChange={e => setNewCust(p=>({...p,phone:e.target.value}))} />
@@ -1000,6 +1014,7 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showExport, setShowExport] = useState(false);
+  const [page, setPage] = useState(1);
   const { data: orders, loading } = useAsync(() => laundryService.listOrders(), []);
   const completed = orders.filter(o => ['released','cancelled'].includes(o.status));
   const range = resolveReportRange(period, { from: customFrom, to: customTo });
@@ -1008,6 +1023,10 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
     (o.id.toLowerCase().includes(search.toLowerCase()) || o.customerName.toLowerCase().includes(search.toLowerCase())) &&
     withinReportRange(o.date, range)
   );
+
+  // Paint one page at a time; `filtered` stays whole for the totals and export.
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, tab, period, customFrom, customTo]);
 
   const handleExport = () => {
     if (filtered.length === 0) { toast.error('No records to export for the current filters.'); return; }
@@ -1075,7 +1094,7 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
               <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">Loading history…</span></Td></Tr>
             ) : filtered.length === 0 ? (
               <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No completed orders yet.</span></Td></Tr>
-            ) : filtered.map(o => (
+            ) : visible.map(o => (
               <Tr key={o.id}>
                 <Td className="font-mono text-xs font-semibold text-blue-600">{o.id}</Td>
                 <Td className="font-medium text-slate-800">{o.customerName}</Td>
@@ -1090,6 +1109,7 @@ function LaundryHistoryPage({ onNavigate }: { onNavigate: (p: PageId) => void })
             ))}
           </Tbody>
         </Table>
+        <Pagination page={page} total={filtered.length} onPage={setPage} />
       </Card>
 
       <ExportDialog

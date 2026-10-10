@@ -285,9 +285,15 @@ function EmployeesPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
 }
 
 function RolesPage() {
+  // Counts come from the live employee list, not fixed numbers, so they stay
+  // correct as accounts are added, deactivated or removed.
+  const { data: employees } = useAsync(() => employeeService.list(), []);
+  const adminCount = employees.filter(e => e.role === 'admin').length;
+  const staffCount = employees.filter(e => e.role === 'staff').length;
+
   const roles = [
     {
-      name: 'Admin', count: 1,
+      name: 'Admin', count: adminCount,
       permissions: [
         'View Dashboard', 'User Management', 'Laundry Operations', 'Water Refilling',
         'Payment Management', 'Inventory Management', 'Finance Management',
@@ -298,7 +304,7 @@ function RolesPage() {
       restricted: [],
     },
     {
-      name: 'Staff', count: 3,
+      name: 'Staff', count: staffCount,
       permissions: [
         'View Dashboard', 'Laundry Operations', 'Water Refilling',
         'Payment Management (Basic)', 'Inventory (View Only)',

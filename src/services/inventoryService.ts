@@ -166,7 +166,7 @@ export const inventoryService = {
       .eq('id', itemId);
     if (error) throw new Error(describeError(error));
 
-    await supabase.from('stock_movements').insert({
+    const { error: moveError } = await supabase.from('stock_movements').insert({
       inventory_item_id: itemId,
       item_name: item.name,
       type: 'stock_in',
@@ -181,6 +181,8 @@ export const inventoryService = {
       reason: input.reason || 'Purchase delivery',
       processed_by: input.processedBy,
     });
+    // The quantity already changed; a missing audit row must surface, not vanish.
+    if (moveError) throw new Error(describeError(moveError));
 
     return this.getItem(itemId);
   },
@@ -192,7 +194,7 @@ export const inventoryService = {
     const { error } = await supabase.from('inventory_items').update({ current_qty: newQty }).eq('id', itemId);
     if (error) throw new Error(describeError(error));
 
-    await supabase.from('stock_movements').insert({
+    const { error: moveError } = await supabase.from('stock_movements').insert({
       inventory_item_id: itemId,
       item_name: item.name,
       type: 'stock_out',
@@ -204,6 +206,7 @@ export const inventoryService = {
       reason: input.reason,
       processed_by: input.processedBy,
     });
+    if (moveError) throw new Error(describeError(moveError));
 
     return this.getItem(itemId);
   },
@@ -290,7 +293,7 @@ export const inventoryService = {
     if (error) throw new Error(describeError(error));
 
     if (input.items.length) {
-      await supabase.from('purchase_order_items').insert(
+      const { error: itemsError } = await supabase.from('purchase_order_items').insert(
         input.items.map(i => ({
           purchase_order_id: id,
           inventory_item_id: i.itemId || null,
@@ -301,9 +304,54 @@ export const inventoryService = {
           subtotal: i.qty * i.unitCost,
         }))
       );
+      // Roll the header back so a PO never exists with a total but no line items.
+      if (itemsError) {
+        await supabase.from('purchase_orders').delete().eq('id', id);
+        throw new Error(describeError(itemsError));
+      }
     }
 
     const orders = await this.listPurchaseOrders();
     return orders.find(o => o.id === id)!;
+  },
+
+  /**
+   * Receives a pending purchase order: marks it received and adds each linked
+   * line's quantity to stock (with a stock_in movement per line).
+   *
+   * The status flip is done first, conditioned on the order still being
+   * 'pending'. Only the call that actually makes that transition proceeds to add
+   * stock, so clicking "Receive" twice — or two staff receiving at once — can
+   * never add the same delivery to inventory more than once.
+   */
+  async receivePurchaseOrder(poId: string, processedBy: string): Promise<void> {
+    const po = (await this.listPurchaseOrders()).find(o => o.id === poId);
+    if (!po) throw new Error('Purchase order not found.');
+    if (po.status === 'received') throw new Error('This purchase order has already been received.');
+
+    const { data: claimed, error: claimError } = await supabase
+      .from('purchase_orders')
+      .update({ status: 'received', received_date: today() })
+      .eq('id', poId)
+      .eq('status', 'pending')
+      .select('id');
+    if (claimError) throw new Error(describeError(claimError));
+    if (!claimed || claimed.length === 0) {
+      throw new Error('This purchase order has already been received.');
+    }
+
+    for (const line of po.items) {
+      if (!line.itemId || line.qty <= 0) continue;
+      await this.stockIn(line.itemId, {
+        supplierId: po.supplier,
+        supplierName: po.supplierName,
+        poRef: po.id,
+        ref: po.id,
+        qty: line.qty,
+        unitCost: line.unitCost,
+        processedBy,
+        reason: `Received PO ${po.id}`,
+      });
+    }
   },
 };

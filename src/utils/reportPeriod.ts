@@ -105,3 +105,21 @@ export function withinReportRange(date: string, range: ReportRange): boolean {
   const d = date.slice(0, 10);
   return d >= range.from && d <= range.to;
 }
+
+/**
+ * The equal-length window immediately before `[from, to]`, used to compute
+ * period-over-period change. A 1-day range compares against yesterday; a
+ * month-to-date range compares against the same number of days in the prior
+ * month — like-for-like, so a partial current period isn't compared against a
+ * full previous one.
+ */
+export function previousRangeOf(from: string, to: string): { from: string; to: string } {
+  const f = new Date(`${from}T00:00:00`);
+  const t = new Date(`${to}T00:00:00`);
+  const lengthDays = Math.round((t.getTime() - f.getTime()) / 86_400_000) + 1;
+  const prevTo = new Date(f);
+  prevTo.setDate(f.getDate() - 1);
+  const prevFrom = new Date(f);
+  prevFrom.setDate(f.getDate() - lengthDays);
+  return { from: localDate(prevFrom), to: localDate(prevTo) };
+}

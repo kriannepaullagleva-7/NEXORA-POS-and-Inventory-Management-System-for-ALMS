@@ -124,21 +124,28 @@ export const waterService = {
     return this.getSale(id);
   },
 
+  /**
+   * Deducts sold quantities from stock-tracked products. Each deduction is a
+   * single atomic UPDATE in the database (sell_water_stock), so two concurrent
+   * sales of the same product can't both read the old level and lose one
+   * deduction. Errors are collected and rethrown rather than swallowed: a sale
+   * that silently fails to move stock is a stock-integrity bug, not a success.
+   */
   async decrementStock(items: { productId: string; qty: number }[]): Promise<void> {
     if (!items.length) return;
-    const { data } = await supabase
-      .from('water_products')
-      .select('id, stock, track_stock')
-      .in('id', items.map(i => i.productId));
 
-    for (const product of data ?? []) {
-      if (!product.track_stock || product.stock === null) continue;
-      const sold = items.filter(i => i.productId === product.id).reduce((sum, i) => sum + i.qty, 0);
-      if (!sold) continue;
-      await supabase
-        .from('water_products')
-        .update({ stock: Math.max(0, Number(product.stock) - sold) })
-        .eq('id', product.id);
+    // Combine duplicate lines so a product added twice is deducted once, in full.
+    const byProduct = new Map<string, number>();
+    for (const i of items) byProduct.set(i.productId, (byProduct.get(i.productId) ?? 0) + i.qty);
+
+    const failed: string[] = [];
+    for (const [productId, qty] of byProduct) {
+      if (qty <= 0) continue;
+      const { error } = await supabase.rpc('sell_water_stock', { p_product_id: productId, p_qty: qty });
+      if (error) failed.push(productId);
+    }
+    if (failed.length) {
+      throw new Error(`Stock could not be updated for: ${failed.join(', ')}. Check the Inventory counts.`);
     }
   },
 };

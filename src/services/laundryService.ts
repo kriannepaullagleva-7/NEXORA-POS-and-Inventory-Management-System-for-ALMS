@@ -226,6 +226,12 @@ export const laundryService = {
   },
 
   async updateStatus(id: string, status: LaundryStatus): Promise<LaundryOrder> {
+    // A released + fully paid order is a closed sale; don't let a status change
+    // reopen it. Enforced here (not only in the UI) so a direct call can't either.
+    const current = await this.getOrder(id);
+    if (this.isLocked(current)) {
+      throw new Error('This order is released and fully paid, so its status can no longer be changed.');
+    }
     const { error } = await supabase.from('laundry_orders').update({ status }).eq('id', id);
     if (error) throw new Error(describeError(error));
     return this.getOrder(id);
@@ -233,6 +239,9 @@ export const laundryService = {
 
   async markPaid(id: string, amountPaid: number, method: LaundryOrder['paymentMethod'], gcashRef = ''): Promise<LaundryOrder> {
     const order = await this.getOrder(id);
+    if (order.paymentStatus === 'paid') {
+      throw new Error('This order is already fully paid.');
+    }
     const paid = order.paid + amountPaid;
     const { error } = await supabase
       .from('laundry_orders')

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   PageHeader, Card, CardHeader, CardBody, Badge, Button,
   Modal, Confirm, Input, Select, Textarea, SearchBar, PeriodFilter, ExportDialog,
-  useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr, RowActions, ViewAction
+  useToast, KpiCard, StatRow, Table, Thead, Tbody, Th, Td, Tr, RowActions, ViewAction,
+  Pagination, PAGE_SIZE
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { matchesQuery } from '../utils/search';
@@ -48,6 +49,8 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [confirmPrint, setConfirmPrint] = useState(false);
   const [showExport, setShowExport] = useState(false);
 
+  const [page, setPage] = useState(1);
+
   const range = resolveReportRange(period, { from: customFrom, to: customTo });
 
   const printPaymentReceipt = (pay: any) => {
@@ -88,6 +91,13 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
     const matchPeriod = withinReportRange(p.date, range);
     return matchSearch && matchMethod && matchType && matchStatus && matchPeriod;
   });
+
+  // Only the current page is painted. `filtered` stays the full set, so totals
+  // and the PDF export still cover every matching record.
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Any filter change can shrink the result below the current page number.
+  useEffect(() => { setPage(1); }, [search, methodFilter, typeFilter, statusFilter, period, customFrom, customTo]);
 
   const handleExport = () => {
     if (filtered.length === 0) { toast.error('No records to export for the current filters.'); return; }
@@ -185,7 +195,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
                 <Tr><Td colSpan={10} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
               ) : filtered.length === 0 ? (
                 <Tr><Td colSpan={10} align="center"><span className="text-slate-500 py-6 block">No payments match your filters</span></Td></Tr>
-              ) : filtered.map(pay => (
+              ) : visible.map(pay => (
                 <Tr key={pay.id} onClick={() => setViewPayment(pay)}>
                   <Td className="num text-xs font-semibold text-blue-600">{pay.id}</Td>
                   <Td className="font-medium text-slate-800">{pay.customerName}</Td>
@@ -215,6 +225,7 @@ function PaymentLedger({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               ))}
             </Tbody>
         </Table>
+        <Pagination page={page} total={filtered.length} onPage={setPage} />
       </Card>
 
       {/* Payment Detail Modal */}

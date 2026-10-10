@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { Loader2, Search, X, CheckCircle2, AlertCircle, Info, XCircle, FileText, Pencil, Trash2 } from 'lucide-react';
 import { REPORT_PERIOD_OPTIONS, type ReportPeriod } from '../../utils/reportPeriod';
 
@@ -91,8 +91,8 @@ export function Button({ variant = 'primary', size = 'md', icon, loading, childr
   return (
     <button
       className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${className}`}
-      disabled={loading || props.disabled}
       {...props}
+      disabled={loading || props.disabled}
     >
       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : icon}
       {children}
@@ -170,15 +170,24 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   icon?: React.ReactNode;
 }
-export function Input({ label, error, icon, className = '', ...props }: InputProps) {
+export function Input({ label, error, icon, className = '', id, ...props }: InputProps) {
+  const autoId = useId();
+  const fieldId = id ?? autoId;
+  const errId = `${fieldId}-error`;
   return (
     <div className="flex flex-col gap-1.5">
-      {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
+      {label && <label htmlFor={fieldId} className="text-sm font-medium text-slate-700">{label}</label>}
       <div className="relative">
         {icon && <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">{icon}</span>}
-        <input className={`${inputBase} ${icon ? inputPadWithIcon : inputPadX} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`} {...props} />
+        <input
+          id={fieldId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errId : undefined}
+          className={`${inputBase} ${icon ? inputPadWithIcon : inputPadX} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`}
+          {...props}
+        />
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p id={errId} className="text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -188,14 +197,23 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   error?: string;
   options: { value: string; label: string }[];
 }
-export function Select({ label, error, options, className = '', ...props }: SelectProps) {
+export function Select({ label, error, options, className = '', id, ...props }: SelectProps) {
+  const autoId = useId();
+  const fieldId = id ?? autoId;
+  const errId = `${fieldId}-error`;
   return (
     <div className="flex flex-col gap-1.5">
-      {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
-      <select className={`${inputBase} ${inputPadX} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`} {...props}>
+      {label && <label htmlFor={fieldId} className="text-sm font-medium text-slate-700">{label}</label>}
+      <select
+        id={fieldId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errId : undefined}
+        className={`${inputBase} ${inputPadX} ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''} ${className}`}
+        {...props}
+      >
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p id={errId} className="text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -204,12 +222,21 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   label?: string;
   error?: string;
 }
-export function Textarea({ label, error, className = '', ...props }: TextareaProps) {
+export function Textarea({ label, error, className = '', id, ...props }: TextareaProps) {
+  const autoId = useId();
+  const fieldId = id ?? autoId;
+  const errId = `${fieldId}-error`;
   return (
     <div className="flex flex-col gap-1.5">
-      {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
-      <textarea className={`${inputBase} ${inputPadX} resize-none ${error ? 'border-red-400' : ''} ${className}`} {...props} />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {label && <label htmlFor={fieldId} className="text-sm font-medium text-slate-700">{label}</label>}
+      <textarea
+        id={fieldId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errId : undefined}
+        className={`${inputBase} ${inputPadX} resize-none ${error ? 'border-red-400' : ''} ${className}`}
+        {...props}
+      />
+      {error && <p id={errId} className="text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -320,20 +347,40 @@ const modalSizes = {
 };
 
 export function Modal({ open, onClose, title, children, size = 'md', footer }: ModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
+    if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+
+    // Move focus into the dialog so the keyboard isn't left behind the overlay,
+    // and return it to the element that opened the modal once it closes.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+
+    return () => {
+      document.removeEventListener('keydown', handler);
+      previouslyFocused?.focus?.();
+    };
+  }, [open, onClose]);
 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onClick={onClose} />
-      <div className={`relative bg-white rounded-lg sm:rounded-xl shadow-2xl w-full ${modalSizes[size]} max-h-[90vh] flex flex-col animate-scaleIn mx-4 sm:mx-0`}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`relative bg-white rounded-lg sm:rounded-xl shadow-2xl w-full ${modalSizes[size]} max-h-[90vh] flex flex-col animate-scaleIn mx-4 sm:mx-0 outline-none`}
+      >
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="text-base sm:text-lg font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-smooth p-1.5 rounded-lg hover:bg-slate-200 hover:shadow-sm">
+          <h3 id={titleId} className="text-base sm:text-lg font-semibold text-slate-900">{title}</h3>
+          <button type="button" onClick={onClose} aria-label="Close dialog" className="text-slate-400 hover:text-slate-600 transition-smooth p-1.5 rounded-lg hover:bg-slate-200 hover:shadow-sm">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -444,13 +491,53 @@ export function ToastContainer() {
   };
 
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none" role="status" aria-live="polite" aria-atomic="false">
       {toasts.map(t => (
         <div key={t.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium animate-slideInRight pointer-events-auto ${styles[t.type]}`}>
           {iconMap[t.type]}
           {t.message}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+/**
+ * Page controls for the history tables.
+ *
+ * These lists are complete by design (fetchAllRows pages past PostgREST's 1000
+ * row cap), so a year of trading is thousands of rows. Rendering them all at
+ * once builds tens of thousands of DOM nodes and locks up the tablet, so the
+ * table shows one page at a time. Exports and totals still use the full
+ * filtered set — only what is painted is limited.
+ */
+export const PAGE_SIZE = 50;
+
+export function Pagination({ page, total, pageSize = PAGE_SIZE, onPage }: {
+  page: number;
+  total: number;
+  pageSize?: number;
+  onPage: (page: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  if (pageCount <= 1) return null;
+
+  const first = (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+      <p className="text-xs text-slate-500 font-medium">
+        Showing <span className="num">{first}</span>–<span className="num">{last}</span> of <span className="num">{total}</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button size="xs" variant="outline" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</Button>
+        <span className="text-xs text-slate-600 font-medium whitespace-nowrap">
+          Page <span className="num">{page}</span> of <span className="num">{pageCount}</span>
+        </span>
+        <Button size="xs" variant="outline" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>Next</Button>
+      </div>
     </div>
   );
 }

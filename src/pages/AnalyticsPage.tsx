@@ -32,7 +32,8 @@ import {
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { useAsync } from '../hooks/useAsync';
-import { reportService, type Period, type PeriodSummary } from '../services/reportService';
+import { reportService, emptySummary, periodRange, type Period, type PeriodSummary } from '../services/reportService';
+import { previousRangeOf } from '../utils/reportPeriod';
 import { useInventory } from '../context/DataContext';
 import {
   TrendingUp,
@@ -68,6 +69,19 @@ export default function AnalyticsPage() {
     [dateRange]
   );
 
+  // The same figures for the equal-length window just before this one, so the
+  // KPI trend badges show a real period-over-period change instead of a fixed
+  // number.
+  const { data: prevSummary } = useAsync<PeriodSummary>(
+    () => {
+      const { from, to } = periodRange(dateRange);
+      const prev = previousRangeOf(from, to);
+      return reportService.summaryForRange(prev.from, prev.to);
+    },
+    emptySummary(),
+    [dateRange]
+  );
+
   const { data: topSellers } = useAsync(
     () => reportService.topSellersFor(dateRange),
     { services: [], products: [] },
@@ -85,6 +99,15 @@ export default function AnalyticsPage() {
   const lowStock = inventoryItems.filter(i => i.status !== 'normal').length;
   const inventoryValue = inventoryItems.reduce((s, i) => s + i.currentQty * i.costPerUnit, 0);
   const netRevenue = summary.netRevenue;
+
+  // Period-over-period change for a KPI. No prior activity to compare against
+  // reads as "New" when there's a figure now, or "—" when there's nothing yet,
+  // rather than a divide-by-zero.
+  const trendOf = (current: number, previous: number): { value: string; up: boolean } => {
+    if (previous <= 0) return current > 0 ? { value: 'New', up: true } : { value: '—', up: true };
+    const change = ((current - previous) / previous) * 100;
+    return { value: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`, up: change >= 0 };
+  };
 
   const revenueByService = [
     { name: 'Laundry', value: laundryRev },
@@ -133,13 +156,13 @@ export default function AnalyticsPage() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-        <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} trend={{ value: '+8.2%', up: true }}
+        <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} trend={trendOf(totalRevenue, prevSummary.totalRevenue)}
           icon={<TrendingUp className="w-5 h-5 text-green-600" />} />
-        <KpiCard title="Laundry Revenue" value={fmt.peso(laundryRev)} trend={{ value: '+5.4%', up: true }}
+        <KpiCard title="Laundry Revenue" value={fmt.peso(laundryRev)} trend={trendOf(laundryRev, prevSummary.laundryRevenue)}
           icon={<Waves className="w-5 h-5 text-slate-500" />} />
-        <KpiCard title="Water Revenue" value={fmt.peso(waterRev)} trend={{ value: '+11.2%', up: true }}
+        <KpiCard title="Water Revenue" value={fmt.peso(waterRev)} trend={trendOf(waterRev, prevSummary.waterRevenue)}
           icon={<Droplet className="w-5 h-5 text-slate-500" />} />
-        <KpiCard title="Net Profit Margin" value={`${(netRevenue/totalRevenue*100).toFixed(0)}%`} trend={{ value: 'Above target', up: true }}
+        <KpiCard title="Net Profit Margin" value={totalRevenue > 0 ? `${(netRevenue/totalRevenue*100).toFixed(0)}%` : '—'} trend={trendOf(netRevenue, prevSummary.netRevenue)}
           icon={<Percent className="w-5 h-5 text-slate-400" />} />
         <KpiCard title="Total Transactions" value={totalTxns} 
           icon={<ShoppingCart className="w-5 h-5 text-slate-400" />} />

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { matchesQuery } from '../utils/search';
 import { today } from '../services/helpers';
 import {
@@ -22,7 +22,9 @@ import {
   PeriodFilter,
   ExportDialog,
   useToast,
-  KpiCard
+  KpiCard,
+  Pagination,
+  PAGE_SIZE
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
 import { printReceipt, exportReportPdf } from '../utils/pdf';
@@ -75,6 +77,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const [showExport, setShowExport] = useState(false);
   const [viewSale, setViewSale] = useState<WaterSale | null>(null);
   const [confirmReprint, setConfirmReprint] = useState(false);
+  const [page, setPage] = useState(1);
 
   const range = resolveReportRange(period, { from: customFrom, to: customTo });
 
@@ -113,6 +116,10 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
       s.delivery ? 'delivery' : 'walk-in pickup', s.items.map(i => i.name)) &&
     withinReportRange(s.date, range)
   );
+
+  // Paint one page at a time; `filtered` stays whole for the totals and export.
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, period, customFrom, customTo]);
 
   const handleExport = () => {
     if (filtered.length === 0) { toast.error('No records to export for the current filters.'); return; }
@@ -188,7 +195,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
               <Tr><Td colSpan={9} align="center"><span className="text-red-600 py-6 block">{error}</span></Td></Tr>
             ) : filtered.length === 0 ? (
               <Tr><Td colSpan={9} align="center"><span className="text-slate-500 py-6 block">No sales found</span></Td></Tr>
-            ) : filtered.map(sale => (
+            ) : visible.map(sale => (
               <Tr key={sale.id} onClick={() => setViewSale(sale)}>
                 <Td className="font-mono text-xs text-blue-600 font-semibold">{sale.id}</Td>
                 <Td>
@@ -214,6 +221,7 @@ function WaterDashboard({ onNavigate }: { onNavigate: (p: PageId) => void }) {
             ))}
           </Tbody>
         </Table>
+        <Pagination page={page} total={filtered.length} onPage={setPage} />
       </Card>
 
       {/* Sale Detail Modal */}
@@ -347,7 +355,11 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
   const [activeCategory, setActiveCategory] = useState('All');
   const [showReceipt, setShowReceipt] = useState(false);
   const [confirmPrint, setConfirmPrint] = useState(false);
-  const [txnId] = useState(`WAT-TXN-${String(Math.floor(Math.random()*900)+100)}`);
+  // The database assigns the transaction id on save; there is none to show
+  // before then. Printing a receipt with a made-up id would put a number on
+  // paper that no record matches, so both the receipt id and the print action
+  // wait for this to be set by a successful save.
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   // Number of refilled waters in the cart — only these drive the delivery tier.
   const refillCount = useMemo(
@@ -463,9 +475,9 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
       await activityService.log(employee?.id ?? null, 'Water Refilling', `Created water sale ${sale.id} (${fmt.peso(total)})`);
       await refreshProducts(); // stock levels changed
 
+      setSavedId(sale.id);
       toast.success(`Transaction ${sale.id} completed!`);
       if (change > 0) toast.info(`Change due: ${fmt.peso(change)}`);
-      onNavigate('water');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save the transaction.');
     } finally {
@@ -478,9 +490,9 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
     return (
       <div className="max-w-md mx-auto py-8">
         <div className="flex items-center gap-3 mb-6">
-          <Button variant="outline" size="sm" onClick={() => setShowReceipt(false)} icon={<ChevronLeft className="w-4 h-4" />}>Back to Edit</Button>
+          {!savedId && <Button variant="outline" size="sm" onClick={() => setShowReceipt(false)} icon={<ChevronLeft className="w-4 h-4" />}>Back to Edit</Button>}
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Review Receipt</h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{savedId ? 'Receipt' : 'Review Receipt'}</h1>
           </div>
         </div>
         
@@ -492,7 +504,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
             </div>
             <div className="text-xl font-bold tracking-tight">ALMS Water Refilling</div>
             <div className="text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">Alkaline • Purified • Mineral</div>
-            <div className="mt-4 font-mono text-sm bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 inline-block shadow-inner">{txnId}</div>
+            <div className="mt-4 font-mono text-sm bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 inline-block shadow-inner">{savedId ?? 'Not yet saved'}</div>
           </div>
           
           <div className="px-6 py-5 grid grid-cols-2 gap-4 text-sm border-b border-dashed border-slate-200">
@@ -560,8 +572,10 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
         </div>
         
         <div className="flex gap-3 mt-6">
-          <Button variant="outline" className="flex-1 justify-center" onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
-          <Button variant="primary" className="flex-1 justify-center" loading={saving} onClick={persistSale}>Confirm & Finish</Button>
+          <Button variant="outline" className="flex-1 justify-center" disabled={!savedId} onClick={() => setConfirmPrint(true)} icon={<ReceiptText className="w-4 h-4" />}>Print Receipt</Button>
+          {savedId
+            ? <Button variant="primary" className="flex-1 justify-center" onClick={() => onNavigate('water')}>Done</Button>
+            : <Button variant="primary" className="flex-1 justify-center" loading={saving} onClick={persistSale}>Confirm &amp; Finish</Button>}
         </div>
 
         <Confirm
@@ -571,7 +585,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
             printReceipt({
               businessName: 'ALMS Water Refilling',
               tagline: 'Alkaline • Purified • Mineral',
-              txnId,
+              txnId: savedId ?? '',
               dateTime: new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
               cashier: userName,
               customer: custName || 'Walk-in Customer',
@@ -587,7 +601,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
             toast.success('Receipt downloaded.');
           }}
           title="Print Receipt?"
-          message={`Generate an 80mm receipt PDF for transaction ${txnId}.`}
+          message={`Generate a 58mm receipt PDF for transaction ${savedId ?? ''}.`}
           confirmLabel="Print Receipt"
         />
       </div>
@@ -600,7 +614,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
         <Button variant="outline" size="sm" onClick={() => onNavigate('water')} icon={<ChevronLeft className="w-4 h-4" />}>Back</Button>
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Point of Sale</h1>
-          <p className="text-xs text-slate-500 font-mono mt-0.5">{txnId} · {new Date().toLocaleDateString('en-PH')}</p>
+          <p className="text-xs text-slate-500 font-mono mt-0.5">New Sale · {new Date().toLocaleDateString('en-PH')}</p>
         </div>
       </div>
 
@@ -648,7 +662,7 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input placeholder="Customer Name (optional for walk-in)" value={newCust.name} onChange={e => setNewCust(p=>({...p,name:e.target.value}))} className="col-span-2" />
                   <Input placeholder="Phone Number" value={newCust.phone} onChange={e => setNewCust(p=>({...p,phone:e.target.value}))} />
                   <Input placeholder="Address" value={newCust.address} onChange={e => setNewCust(p=>({...p,address:e.target.value}))} />

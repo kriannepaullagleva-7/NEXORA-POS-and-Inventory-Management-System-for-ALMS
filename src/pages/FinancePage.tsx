@@ -354,11 +354,11 @@ function ExpensesPage() {
           <Select label="Expense Category *" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
             options={[{value:'',label:'Select...'},{value:'Inventory/Supplies',label:'Inventory / Supplies'},{value:'Utilities',label:'Utilities'},{value:'Rent',label:'Rent'},{value:'Salaries',label:'Salaries'},{value:'Maintenance',label:'Maintenance'},{value:'Other',label:'Other'}]} />
           <Input label="Description *" placeholder="Brief description of expense" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Amount (₱) *" type="number" placeholder="0.00" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} />
             <Input label="Date *" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Payment Method *" value={form.method} onChange={e => setForm(p => ({ ...p, method: e.target.value }))}
               options={[{value:'cash',label:'Cash'},{value:'bank',label:'Bank Transfer'},{value:'gcash',label:'GCash'}]} />
             <Select label="Supplier (Optional)" value={form.supplierId} onChange={e => setForm(p => ({ ...p, supplierId: e.target.value }))}

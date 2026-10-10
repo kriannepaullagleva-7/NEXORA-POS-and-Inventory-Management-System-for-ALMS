@@ -99,11 +99,16 @@ export interface ReceiptOptions {
 }
 
 export function printReceipt(opts: ReceiptOptions) {
-  const width = 80;
-  const estHeight = 58 + opts.items.length * 5 + 40;
+  // 58mm-class thermal roll (GOOJPRT PT-210): ~48mm printable. The page is the
+  // full 58mm paper width with a 4mm quiet zone each side, so nothing is placed
+  // in the region the printer physically cannot reach. A line that wraps adds
+  // rows, so the height is estimated from the item count plus a generous footer
+  // allowance; underestimating would clip the total off the bottom.
+  const width = 58;
+  const estHeight = 60 + opts.items.length * 9 + 44;
   const doc = new jsPDF({ unit: 'mm', format: [width, estHeight] });
-  const marginX = 5;
-  let y = 9;
+  const marginX = 4;
+  let y = 8;
 
   doc.setFont('courier', 'bold');
   doc.setFontSize(11);

@@ -266,7 +266,7 @@ function SettingsPage({ userName, userRole, onNavigate }: { userName: string; us
         </CardHeader>
         <CardBody className="space-y-4">
           <Input label="Registered Business Name" defaultValue="ALMS Water Refilling Station & Laundry Shop" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Contact Number" defaultValue="(082) 222-4570" />
             <Input label="Public Email Address" type="email" defaultValue="almswaterrefillingstation@gmail.com" />
           </div>

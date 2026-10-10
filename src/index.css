@@ -148,6 +148,24 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Respect the OS "reduce motion" setting: drop entrance animations, hover lifts
+   and the active press-scale, and make transitions effectively instant. Elements
+   still appear and remain fully usable — only the movement is removed. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hover\:-translate-y-0.5:hover,
+  .active\:scale-95:active {
+    transform: none !important;
+  }
+}
+
 /* Animation utilities */
 .animate-slideInUp {
   animation: slideInUp 0.3s ease-out;
