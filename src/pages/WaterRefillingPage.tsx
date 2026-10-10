@@ -337,7 +337,28 @@ function WaterPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; u
   const { customers } = useCustomers();
   const { employee } = useAuth();
   const [saving, setSaving] = useState(false);
-  const { data: deliveryTiers } = useAsync(() => pricingService.listDeliveryTiers(), []);
+  const { data: deliveryTiers, reload: reloadTiers } = useAsync(() => pricingService.listDeliveryTiers(), []);
+
+  /**
+   * Prices and delivery tiers are read once when the till opens. A till is left
+   * open all day, so a price the owner changes on another device — or on the
+   * Products screen next door — would otherwise keep ringing up at the old rate
+   * until someone reloaded. Re-reading whenever the tab is looked at again
+   * keeps an open till honest without polling.
+   */
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      void reloadTiers();
+      void refreshProducts();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [reloadTiers, refreshProducts]);
   const waterProducts = byModule('water').filter(p => p.active);
 
   const [custSearch, setCustSearch] = useState('');

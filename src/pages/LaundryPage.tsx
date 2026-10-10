@@ -486,10 +486,30 @@ interface CartLine { svcId: string; name: string; price: number; qty: number; un
 
 function LaundryPOS({ onNavigate, userName }: { onNavigate: (p: PageId) => void; userName: string }) {
   const toast = useToast();
-  const { byModule } = useProducts();
+  const { byModule, refresh: refreshProducts } = useProducts();
   const { customers } = useCustomers();
   const { employee } = useAuth();
-  const { data: laundryAddons } = useAsync(() => laundryService.listAddons(), []);
+  const { data: laundryAddons, reload: reloadAddons } = useAsync(() => laundryService.listAddons(), []);
+
+  /**
+   * Service prices and add-ons are read once when the till opens, and a till
+   * stays open all day. Re-reading whenever the tab is looked at again means a
+   * price changed on the Products screen reaches the counter without anyone
+   * reloading, instead of quietly ringing up at yesterday's rate.
+   */
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      void reloadAddons();
+      void refreshProducts();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [reloadAddons, refreshProducts]);
   const [saving, setSaving] = useState(false);
   const laundryServices = byModule('laundry').filter(p => p.active);
 
