@@ -85,10 +85,6 @@ export const laundryService = {
     return rows.map(toOrder);
   },
 
-  async listServices(): Promise<LaundryServiceRow[]> {
-    return unwrap(await supabase.from('laundry_services').select('*').order('id'));
-  },
-
   async listAddons(): Promise<LaundryAddon[]> {
     const rows = unwrap(await supabase.from('laundry_addons').select('*').order('id')) as LaundryAddonRow[];
     return rows.map(r => ({ id: r.id, name: r.name, price: Number(r.price) || 0 }));

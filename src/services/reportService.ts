@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { localDate, unwrap } from './helpers';
+import { localDate } from './helpers';
 
 export interface DailyRevenuePoint {
   day: string;
@@ -176,11 +176,6 @@ export const reportService = {
     return { services: pick('service'), products: pick('product') };
   },
 
-  /** Best-selling services and products across the whole ledger. */
-  async topSellers() {
-    return this.topSellersBetween('1970-01-01', iso(new Date()));
-  },
-
   /** Last N calendar days, oldest first — used by the dashboard chart. */
   async dailyRevenue(days = 7): Promise<DailyRevenuePoint[]> {
     const { data, error } = await supabase.rpc('bi_daily_revenue', { p_days: days });
@@ -262,8 +257,4 @@ export const reportService = {
     };
   },
 
-  async listExpenses(since?: string) {
-    const query = supabase.from('expenses').select('*').order('date', { ascending: false });
-    return unwrap(since ? await query.gte('date', since) : await query);
-  },
 };

@@ -666,9 +666,6 @@ export function StatRow({ label, value, mono }: { label: string; value: React.Re
 }
 
 // ─── Section Title ────────────────────────────────────────────────────────────
-export function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-base font-semibold text-slate-900 mb-4">{children}</h2>;
-}
 
 // ─── Grid ─────────────────────────────────────────────────────────────────────
 export function Grid({ cols = 4, children, className = '' }: { cols?: 2|3|4|5; children: React.ReactNode; className?: string }) {
@@ -682,14 +679,6 @@ export function Grid({ cols = 4, children, className = '' }: { cols?: 2|3|4|5; c
 }
 
 // ─── Receipt ─────────────────────────────────────────────────────────────────
-export function ReceiptLine({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <div className={`flex justify-between text-sm py-1 ${bold ? 'font-semibold text-slate-900 border-t border-slate-200 pt-2 mt-1' : 'text-slate-600'}`}>
-      <span>{label}</span>
-      <span className="num">{value}</span>
-    </div>
-  );
-}
 
 // ─── Custom Chart Tooltip ─────────────────────────────────────────────────
 export function ChartTooltip({ active, payload, label, labelFormatter, formatter }: any) {

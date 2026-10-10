@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { PaymentRow } from '../types/database';
 import type { Payment } from '../types/models';
-import { describeError, fetchAllRows, nextId, toPaymentMethod, unwrap, today } from './helpers';
+import { fetchAllRows, nextId, toPaymentMethod, unwrap, today } from './helpers';
 
 function toPayment(row: PaymentRow): Payment {
   return {
@@ -79,25 +79,4 @@ export const paymentService = {
     return toPayment(row);
   },
 
-  async settleDebt(id: string, amountReceived: number, method: Payment['method'], gcashRef = ''): Promise<Payment> {
-    const existing = unwrap(await supabase.from('payments').select('*').eq('id', id).single()) as PaymentRow;
-    const received = Number(existing.amount_received) + amountReceived;
-    const balance = Math.max(0, Number(existing.amount) - received);
-
-    const { error } = await supabase
-      .from('payments')
-      .update({
-        amount_received: received,
-        balance,
-        method: toPaymentMethod(method),
-        gcash_reference: gcashRef || existing.gcash_reference,
-        status: balance === 0 ? 'paid' : 'partial',
-        change_amount: Math.max(0, received - Number(existing.amount)),
-      })
-      .eq('id', id);
-    if (error) throw new Error(describeError(error));
-
-    const row = unwrap(await supabase.from('payments').select('*').eq('id', id).single()) as PaymentRow;
-    return toPayment(row);
-  },
 };

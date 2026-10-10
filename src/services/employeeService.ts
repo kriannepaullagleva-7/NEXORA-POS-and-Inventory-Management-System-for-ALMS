@@ -24,16 +24,6 @@ export const employeeService = {
     return data;
   },
 
-  async getByEmail(email: string): Promise<EmployeeRow | null> {
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .ilike('email', email)
-      .maybeSingle();
-    if (error) throw new Error(describeError(error));
-    return data;
-  },
-
   async create(input: EmployeeInput): Promise<EmployeeRow> {
     const id = await nextId('employees', 'EMP-', 3);
     return unwrap(
@@ -59,11 +49,6 @@ export const employeeService = {
 
   async setStatus(id: string, status: 'active' | 'inactive'): Promise<EmployeeRow> {
     return this.update(id, { status });
-  },
-
-  /** Profile photo is stored as a resized data URL so no Storage bucket is required. */
-  async setAvatar(id: string, avatarUrl: string | null): Promise<EmployeeRow> {
-    return this.update(id, { avatar_url: avatarUrl });
   },
 
   async touchLastLogin(id: string): Promise<void> {
