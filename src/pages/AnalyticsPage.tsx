@@ -28,33 +28,34 @@ import {
   Tr,
   KpiCard,
   StatRow,
-  ChartTooltip
+  ChartTooltip,
+  ExportDialog,
+  useToast
 } from '../components/ui';
 import { fmt } from '../utils/formatters';
+import { exportReportPdf } from '../utils/pdf';
 import { useAsync } from '../hooks/useAsync';
 import { reportService, emptySummary, periodRange, type Period, type PeriodSummary } from '../services/reportService';
 import { previousRangeOf } from '../utils/reportPeriod';
 import { useInventory } from '../context/DataContext';
+import { inventoryService } from '../services/inventoryService';
 import {
   TrendingUp,
   Droplet,
   Waves,
   Package,
-  FileText,
   Banknote,
-  ShieldAlert,
   Wallet,
   Printer,
-  Download,
-  ShoppingCart,
-  Percent
+  Download
 } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444'];
 
 export default function AnalyticsPage() {
-  const [reportType, setReportType] = useState('overview');
   const [dateRange, setDateRange] = useState<Period>('monthly');
+  const [exportMode, setExportMode] = useState<'export' | 'print' | null>(null);
+  const toast = useToast();
 
   // Everything below is read from the database for the selected window, so the
   // Today / Week / Month / Year filter changes every figure on the page.
@@ -91,14 +92,13 @@ export default function AnalyticsPage() {
   const { data: monthlyRevenue } = useAsync(() => reportService.monthlyRevenue(), []);
   const { data: dailyRevenue } = useAsync(() => reportService.dailyRevenue(), []);
   const { items: inventoryItems } = useInventory();
+  const { data: dbInventoryItems, loading: dbItemsLoading } = useAsync(() => inventoryService.listItems(), []);
 
+  const allItems = dbInventoryItems.length > 0 ? dbInventoryItems : inventoryItems;
   const totalRevenue = summary.totalRevenue;
   const laundryRev = summary.laundryRevenue;
   const waterRev = summary.waterRevenue;
-  const totalTxns = summary.totalTransactions;
-  const lowStock = inventoryItems.filter(i => i.status !== 'normal').length;
-  const inventoryValue = inventoryItems.reduce((s, i) => s + i.currentQty * i.costPerUnit, 0);
-  const netRevenue = summary.netRevenue;
+  const inventoryValue = allItems.reduce((s, i) => s + (Number(i.currentQty) || 0) * (Number(i.costPerUnit) || 0), 0);
 
   // Period-over-period change for a KPI. No prior activity to compare against
   // reads as "New" when there's a figure now, or "—" when there's nothing yet,
@@ -119,13 +119,81 @@ export default function AnalyticsPage() {
     { name: 'GCash', value: summary.gcash },
   ];
 
-  const reports = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'laundry', label: 'Laundry Analytics' },
-    { id: 'water', label: 'Water Sales' },
-    { id: 'inventory', label: 'Inventory' },
-    { id: 'payments', label: 'Payment Trends' },
-  ];
+  const handleExportConfirm = () => {
+    exportReportPdf({
+      reportTitle: `Business Intelligence Report — ${summary.label}`,
+      filtersLabel: `Date Range: ${summary.from} to ${summary.to}`,
+      action: exportMode === 'print' ? 'print' : 'save',
+      columns: ['Metric / Item', 'Quantity / Details', 'Revenue / Valuation'],
+      rows: [
+        ['Total Revenue', `${summary.totalTransactions} transactions`, fmt.peso(summary.totalRevenue)],
+        ['Laundry Revenue', `${summary.laundryCount} orders completed`, fmt.peso(summary.laundryRevenue)],
+        ['Water Refilling Revenue', `${summary.waterCount} sales completed`, fmt.peso(summary.waterRevenue)],
+        ['Inventory Value', `${allItems.length} active inventory items`, fmt.peso(inventoryValue)],
+        ['Cash Collections', 'Cash payments', fmt.peso(summary.cash)],
+        ['GCash Collections', 'Digital payments', fmt.peso(summary.gcash)],
+        ...topSellers.services.map(svc => [
+          `Laundry: ${svc.name}`,
+          `${svc.qty} orders`,
+          fmt.peso(svc.revenue)
+        ]),
+        ...topSellers.products.map(prod => [
+          `Water: ${prod.name}`,
+          `${prod.qty} units`,
+          fmt.peso(prod.revenue)
+        ]),
+      ],
+      fileName: `ALMS_Business_Intelligence_${dateRange}.pdf`,
+    });
+    toast.success(exportMode === 'print' ? 'Report ready to print.' : 'Business Intelligence report exported.');
+  };
+
+  const handleExportLaundryServices = () => {
+    if (topSellers.services.length === 0) {
+      toast.error('No laundry sales recorded for the selected period.');
+      return;
+    }
+    const totalRev = topSellers.services.reduce((s, x) => s + x.revenue, 0) || 1;
+    exportReportPdf({
+      reportTitle: `Laundry Services Performance — ${summary.label}`,
+      filtersLabel: `Date Range: ${summary.from} to ${summary.to}`,
+      columns: ['Rank', 'Service Name', 'Orders Completed', 'Revenue Generated', 'Avg. Order Value', 'Revenue Share'],
+      rows: topSellers.services.map((svc, i) => [
+        `#${i + 1}`,
+        svc.name,
+        svc.qty,
+        fmt.peso(svc.revenue),
+        fmt.peso(svc.qty ? svc.revenue / svc.qty : 0),
+        `${((svc.revenue / totalRev) * 100).toFixed(0)}%`,
+      ]),
+      totalsRow: ['', 'TOTAL', topSellers.services.reduce((s, x) => s + x.qty, 0), fmt.peso(totalRev), '', '100%'],
+      fileName: `ALMS_Laundry_Services_Performance_${dateRange}.pdf`,
+    });
+    toast.success('Laundry Services Performance exported.');
+  };
+
+  const handleExportWaterProducts = () => {
+    if (topSellers.products.length === 0) {
+      toast.error('No water sales recorded for the selected period.');
+      return;
+    }
+    const totalRev = topSellers.products.reduce((s, x) => s + x.revenue, 0) || 1;
+    exportReportPdf({
+      reportTitle: `Water Products Performance — ${summary.label}`,
+      filtersLabel: `Date Range: ${summary.from} to ${summary.to}`,
+      columns: ['Rank', 'Product Configuration', 'Quantity Sold', 'Total Revenue', 'Category Share'],
+      rows: topSellers.products.map((prod, i) => [
+        `#${i + 1}`,
+        prod.name,
+        prod.qty,
+        fmt.peso(prod.revenue),
+        `${((prod.revenue / totalRev) * 100).toFixed(0)}%`,
+      ]),
+      totalsRow: ['', 'TOTAL', topSellers.products.reduce((s, x) => s + x.qty, 0), fmt.peso(totalRev), '100%'],
+      fileName: `ALMS_Water_Products_Performance_${dateRange}.pdf`,
+    });
+    toast.success('Water Products Performance exported.');
+  };
 
   return (
     <div className="space-y-6">
@@ -139,22 +207,12 @@ export default function AnalyticsPage() {
               <option value="monthly">This Month</option>
               <option value="yearly">This Year</option>
             </select>
-            <Button variant="outline" icon={<Download className="w-4 h-4" />}>Export Report</Button>
-            <Button variant="outline" icon={<Printer className="w-4 h-4" />}>Print</Button>
+            <Button variant="outline" onClick={() => setExportMode('export')} icon={<Download className="w-4 h-4" />}>Export Report</Button>
+            <Button variant="outline" onClick={() => setExportMode('print')} icon={<Printer className="w-4 h-4" />}>Print</Button>
           </div>
         } />
 
-      {/* Report Type Selector */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {reports.map(r => (
-          <button key={r.id} onClick={() => setReportType(r.id)}
-            className={`px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-smooth border ${reportType === r.id ? 'bg-linear-to-r from-blue-600 to-blue-700 text-white border-blue-700 shadow-lg hover:shadow-lg -translate-y-0.5' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm'}`}>
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      {/* KPI Grid */}
+      {/* KPI Grid - 4 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
         <KpiCard title="Total Revenue" value={fmt.peso(totalRevenue)} trend={trendOf(totalRevenue, prevSummary.totalRevenue)}
           icon={<TrendingUp className="w-5 h-5 text-green-600" />} />
@@ -162,16 +220,8 @@ export default function AnalyticsPage() {
           icon={<Waves className="w-5 h-5 text-slate-500" />} />
         <KpiCard title="Water Revenue" value={fmt.peso(waterRev)} trend={trendOf(waterRev, prevSummary.waterRevenue)}
           icon={<Droplet className="w-5 h-5 text-slate-500" />} />
-        <KpiCard title="Net Profit Margin" value={totalRevenue > 0 ? `${(netRevenue/totalRevenue*100).toFixed(0)}%` : '—'} trend={trendOf(netRevenue, prevSummary.netRevenue)}
-          icon={<Percent className="w-5 h-5 text-slate-400" />} />
-        <KpiCard title="Total Transactions" value={totalTxns} 
-          icon={<ShoppingCart className="w-5 h-5 text-slate-400" />} />
-        <KpiCard title="Laundry Orders" value={summary.laundryCount} 
-          icon={<FileText className="w-5 h-5 text-slate-400" />} />
-        <KpiCard title="Low Stock Alerts" value={lowStock} 
-          icon={<ShieldAlert className={`w-5 h-5 ${lowStock > 0 ? 'text-red-500' : 'text-slate-400'}`} />} />
-        <KpiCard title="Inventory Value" value={fmt.peso(inventoryValue)} 
-          icon={<Package className="w-5 h-5 text-slate-400" />} />
+        <KpiCard title="Inventory Value" value={fmt.peso(inventoryValue)} subtext={dbItemsLoading ? 'Loading…' : `${allItems.length} inventory item${allItems.length === 1 ? '' : 's'}`}
+          icon={<Package className="w-5 h-5 text-slate-500" />} />
       </div>
 
       {/* Charts */}
@@ -299,7 +349,7 @@ export default function AnalyticsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-slate-900 tracking-tight">Laundry Services Performance</h3>
-            <Button variant="outline" size="sm" icon={<Download className="w-3.5 h-3.5"/>}>Export</Button>
+            <Button variant="outline" size="sm" onClick={handleExportLaundryServices} icon={<Download className="w-3.5 h-3.5"/>}>Export</Button>
           </div>
         </CardHeader>
         <Table>
@@ -347,7 +397,10 @@ export default function AnalyticsPage() {
       {/* Water Performance */}
       <Card>
         <CardHeader>
-          <h3 className="font-semibold text-slate-900 tracking-tight">Water Products Performance</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-900 tracking-tight">Water Products Performance</h3>
+            <Button variant="outline" size="sm" onClick={handleExportWaterProducts} icon={<Download className="w-3.5 h-3.5"/>}>Export</Button>
+          </div>
         </CardHeader>
         <Table>
           <Thead>
@@ -388,6 +441,16 @@ export default function AnalyticsPage() {
           </Tbody>
         </Table>
       </Card>
+
+      <ExportDialog
+        open={exportMode !== null}
+        onClose={() => setExportMode(null)}
+        onConfirm={handleExportConfirm}
+        title={exportMode === 'print' ? 'Print Business Intelligence Report?' : 'Export Business Intelligence Report?'}
+        reportTitle={`Business Intelligence (${summary.label})`}
+        rowCount={6 + topSellers.services.length + topSellers.products.length}
+        confirmLabel={exportMode === 'print' ? 'Print' : 'Export PDF'}
+      />
     </div>
   );
 }

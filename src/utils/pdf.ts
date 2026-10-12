@@ -24,6 +24,7 @@ interface ExportReportOptions {
   rows: (string | number)[][];
   totalsRow?: (string | number)[];
   fileName?: string;
+  action?: 'save' | 'print';
 }
 
 export function exportReportPdf(opts: ExportReportOptions) {
@@ -74,7 +75,31 @@ export function exportReportPdf(opts: ExportReportOptions) {
     doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 20, { align: 'right' });
   }
 
-  doc.save(opts.fileName || `${opts.reportTitle.replace(/\s+/g, '_')}.pdf`);
+  if (opts.action === 'print') {
+    doc.autoPrint();
+    const blobUrl = String(doc.output('bloburl'));
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.src = blobUrl;
+    document.body.appendChild(iframe);
+    iframe.onload = () => {
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.open(blobUrl, '_blank');
+        }
+      }, 100);
+    };
+  } else {
+    doc.save(opts.fileName || `${opts.reportTitle.replace(/\s+/g, '_')}.pdf`);
+  }
 }
 
 export interface ReceiptLineItem { name: string; qty: number; unit?: string; price: number; subtotal: number; }

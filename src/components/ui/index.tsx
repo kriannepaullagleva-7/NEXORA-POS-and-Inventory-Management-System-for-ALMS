@@ -431,7 +431,7 @@ interface ExportDialogProps {
   rowCount?: number;
   confirmLabel?: string;
 }
-export function ExportDialog({ open, onClose, onConfirm, title, reportTitle, period, filters, rowCount, confirmLabel = 'Export PDF' }: ExportDialogProps) {
+export function ExportDialog({ open, onClose, onConfirm, title, reportTitle, period: _period, filters, rowCount, confirmLabel = 'Export PDF' }: ExportDialogProps) {
   return (
     <Modal open={open} onClose={onClose} title={title} size="sm"
       footer={
@@ -443,7 +443,6 @@ export function ExportDialog({ open, onClose, onConfirm, title, reportTitle, per
     >
       <div className="space-y-2.5 text-sm">
         <div className="flex justify-between"><span className="text-slate-500">Report</span><span className="font-medium text-slate-900 text-right">{reportTitle}</span></div>
-        {period && <div className="flex justify-between"><span className="text-slate-500">Period</span><span className="font-medium text-slate-900 text-right">{period}</span></div>}
         {filters && <div className="flex justify-between"><span className="text-slate-500">Filters</span><span className="font-medium text-slate-900 text-right">{filters}</span></div>}
         {rowCount !== undefined && <div className="flex justify-between"><span className="text-slate-500">Rows</span><span className="font-medium text-slate-900">{rowCount}</span></div>}
       </div>

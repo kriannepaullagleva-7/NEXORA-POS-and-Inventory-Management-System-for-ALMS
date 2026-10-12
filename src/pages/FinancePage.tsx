@@ -374,19 +374,17 @@ function ExpensesPage() {
 function FinancialReportsPage() {
   const { data: monthlyRevenue, loading } = useAsync(() => reportService.monthlyRevenue(), []);
   const { data: expenses } = useAsync(() => financeService.listExpenses(), []);
-  const [period, setPeriod] = useState('monthly');
   const [exportMode, setExportMode] = useState<'export' | 'print' | null>(null);
   const toast = useToast();
   const totalRev = monthlyRevenue.reduce((s: number, m: any)=>s+m.laundry+m.water,0);
   const totalExp = expenses.reduce((s: number, e: any)=>s+e.amount,0);
   const laundryRev = monthlyRevenue.reduce((s: number, m: any) => s + m.laundry, 0);
   const waterRev = monthlyRevenue.reduce((s: number, m: any) => s + m.water, 0);
-  const periodLabel: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
 
   const handleExportConfirm = () => {
     exportReportPdf({
       reportTitle: 'Financial Reports — Monthly P&L Statement',
-      period: `${periodLabel[period]} · Year-to-Date`,
+      action: exportMode === 'print' ? 'print' : 'save',
       columns: ['Period', 'Laundry Rev.', 'Water Rev.', 'Total Revenue', 'Est. Expenses', 'Net Income', 'Profit Margin'],
       rows: monthlyRevenue.map((m: any) => {
         const rev = m.laundry + m.water;
@@ -409,15 +407,6 @@ function FinancialReportsPage() {
             <Button variant="outline" onClick={() => setExportMode('print')} icon={<Printer className="w-4 h-4" />}>Print</Button>
           </div>
         } />
-        
-      <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-slate-200 w-max shadow-sm">
-        {['daily','weekly','monthly','yearly'].map(p => (
-          <button key={p} onClick={() => setPeriod(p)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-bold capitalize transition-all ${period===p ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            {p}
-          </button>
-        ))}
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 flex flex-col">
@@ -531,7 +520,6 @@ function FinancialReportsPage() {
         onConfirm={handleExportConfirm}
         title={exportMode === 'print' ? 'Print Report?' : 'Export Report?'}
         reportTitle="Monthly P&L Statement"
-        period={`${periodLabel[period]} · Year-to-Date`}
         rowCount={monthlyRevenue.length}
         confirmLabel={exportMode === 'print' ? 'Print' : 'Export PDF'}
       />

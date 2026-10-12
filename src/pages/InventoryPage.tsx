@@ -469,7 +469,7 @@ function StockMovementsPage() {
       filtersLabel: typeFilter === 'all' ? 'All records' : typeFilter === 'stock_in' ? 'Stock In only' : 'Stock Out only',
       columns: ['Log ID', 'Date & Time', 'Item', 'Type', 'Qty Change', 'Balance', 'Source / Reason', 'Reference', 'Processed By'],
       rows: filtered.map(m => [
-        m.id, m.date, m.item, m.type === 'stock_in' ? 'IN' : 'OUT',
+        m.id, fmt.datetime(m.date), m.item, m.type === 'stock_in' ? 'IN' : 'OUT',
         `${m.type === 'stock_in' ? '+' : '-'}${m.qty} ${m.unit}`, `${m.prevStock} -> ${m.newStock}`,
         m.type === 'stock_in' ? m.supplierName : m.reason, m.poRef ? `PO: ${m.poRef} / ${m.ref}` : m.ref, m.processedBy,
       ]),
@@ -501,7 +501,7 @@ function StockMovementsPage() {
           <Thead>
             <Tr>
               <Th>Log ID</Th>
-              <Th>Date & Time</Th>
+              <Th className="whitespace-nowrap min-w-32">Date & Time</Th>
               <Th>Item</Th>
               <Th>Type</Th>
               <Th align="right">Qty Change</Th>
@@ -516,7 +516,7 @@ function StockMovementsPage() {
             {filtered.map(m => (
               <Tr key={m.id}>
                 <Td className="num text-[10px] text-slate-400">{m.id}</Td>
-                <Td className="num text-xs text-slate-600">{fmt.datetime(m.date)}</Td>
+                <Td className="num text-xs text-slate-600 whitespace-nowrap">{fmt.datetime(m.date)}</Td>
                 <Td>
                   <p className="font-medium text-slate-900 max-w-50 truncate">{m.item}</p>
                 </Td>
@@ -751,7 +751,7 @@ function SuppliersPage() {
         footer={<><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button><Button variant="primary" loading={saving} onClick={handleAdd}>Save Supplier</Button></>}>
         <div className="space-y-4">
           <Input label="Company Name *" placeholder="e.g. ABC Supplies" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-          <Input label="Contact Person" placeholder="e.g. Juan dela Cruz" value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
+          <Input label="Contact Person" placeholder="e.g. Maria Santos" value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Email Address" type="email" placeholder="contact@supplier.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
             <Input label="Phone Number" placeholder="02XXXXXXXX" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />

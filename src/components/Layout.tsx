@@ -92,7 +92,7 @@ const navItems: NavItem[] = [
       { id: 'finance-reports', path: '/finance/reports', label: 'Financial Reports' },
     ],
   },
-  { id: 'analytics', path: '/analytics', label: 'Business Analytics', adminOnly: true, icon: <BarChart3 className="w-5 h-5" /> },
+  { id: 'analytics', path: '/analytics', label: 'Business Intelligence', adminOnly: true, icon: <BarChart3 className="w-5 h-5" /> },
   {
     id: 'users', path: '/users', label: 'User Management', adminOnly: true, icon: <Users className="w-5 h-5" />,
     children: [
@@ -114,7 +114,7 @@ const pageTitle: Record<string, string> = {
   '/inventory/items': 'Stocks', '/inventory/stock': 'Stock Movements',
   '/inventory/suppliers': 'Suppliers', '/inventory/purchase': 'Purchase Orders',
   '/finance': 'Finance', '/finance/expenses': 'Expense Management', '/finance/reports': 'Financial Reports',
-  '/analytics': 'Business Analytics',
+  '/analytics': 'Business Intelligence',
   '/water/products': 'Water Products and Services', '/laundry/services': 'Laundry Products and Services',
   '/settings': 'Settings', '/profile': 'My Profile', '/change-password': 'Change Password',
   '/users/activity-logs': 'System Logs',
@@ -276,9 +276,9 @@ export default function Layout() {
                   }}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${active ? 'text-white bg-slate-800' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={active ? 'text-blue-400' : 'text-slate-500'}>{item.icon}</span>
-                    {item.label}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`shrink-0 ${active ? 'text-blue-400' : 'text-slate-500'}`}>{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
                   </div>
                   {hasChildren && (
                     <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />

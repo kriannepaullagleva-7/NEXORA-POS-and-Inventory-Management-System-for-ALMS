@@ -19,9 +19,13 @@ logs/
 /.plugins/
 /.opencode-skills/
 
-# Agent instruction files — local tooling, not application source.
+# Agent instruction files and AI tool directories — local tooling, not application source.
 AGENTS.md
 CLAUDE.md
+.agents/
+.aider-desk/
+.claude/
+docs/
 
 # draw.io diagrams are kept locally rather than versioned here.
 *.drawio
